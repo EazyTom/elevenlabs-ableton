@@ -1,6 +1,8 @@
 <div align="center">
 
-![](ui/assets/ableton-logo.png) ![](ui/assets/elevenapi-logo.png)
+<img src="ui/assets/ableton-logo.png" alt="" height="50" />
+&nbsp;&nbsp;
+<img src="ui/assets/elevenapi-logo.png" alt="" height="50" />
 
 </div>
 
