@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ElevenLabs Voice</title>
+  <script>
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) {
+        window.webkit.messageHandlers.live.postMessage(message);
+      } else if (window.chrome?.webview) {
+        window.chrome.webview.postMessage(message);
+      }
+    }
+
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+
+    function submit() {
+      const voiceId = document.getElementById("voiceId").value.trim()
+        || document.getElementById("voiceSelect").value.trim();
+      if (!voiceId) return;
+      closeWithResult({ cancelled: false, voiceId });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("voiceId").focus();
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeWithResult({ cancelled: true });
+      });
+    });
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    *:not(dialog) { margin: 0; }
+    input, button, select { font: inherit; }
+
+    :root {
+      --c-bg: hsl(0, 0%, 21%);
+      --c-input-bg: hsl(0, 0%, 12%);
+      --c-text: hsl(0, 0%, 71%);
+      --c-text-secondary: hsl(0, 0%, 41%);
+      --c-border: hsl(0, 0%, 7%);
+      --c-button-bg: hsl(0, 0%, 16%);
+      --c-accent: hsl(31, 100%, 67%);
+    }
+
+    html {
+      background: var(--c-bg);
+      color: var(--c-text);
+      font-family: "AbletonSansSmall", sans-serif;
+      font-size: 11.5px;
+      height: 100%;
+    }
+
+    body {
+      height: 100%;
+      padding: 1.25em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25em;
+      color: var(--c-text-secondary);
+    }
+
+    input, select {
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      padding: 0.4em 0.5em;
+      width: 100%;
+      outline: none;
+    }
+
+    input:focus { outline: 2px solid var(--c-text-secondary); }
+
+    p { color: var(--c-text-secondary); line-height: 1.4; }
+
+    .buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5em;
+      margin-top: auto;
+    }
+
+    button {
+      background: var(--c-button-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 1em;
+      padding: 0.35em 1em;
+      cursor: pointer;
+    }
+
+    button.primary:active { background: var(--c-accent); color: #111; }
+  </style>
+</head>
+<body>
+  <p>Select the target ElevenLabs voice for speech-to-speech conversion.</p>
+
+  <label for="voiceSelect">Voice (from library)</label>
+  <select id="voiceSelect">{{VOICE_OPTIONS}}</select>
+
+  <label for="voiceId">Voice ID (override)</label>
+  <input id="voiceId" type="text" placeholder="Optional custom ID" />
+
+  <div class="buttons">
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Transform</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<div align="center">
+
+![](ui/assets/ableton-logo.png) ![](ui/assets/elevenapi-logo.png)
+
+</div>
+
+# Ableton Extension: elevenlabs-ableton
+
+Bring **ElevenLabs** AI audio into **Ableton Live** — text-to-speech, sound effects, music, voice transformation, transcription, stem separation, and more — directly from Live context menus.
+
+**Current release: [v0.4.0](CHANGELOG.md#v040)** · [Changelog](CHANGELOG.md) · [License (GPL-3.0+)](LICENSE)
+
+| | |
+|---|---|
+| **Extension version** | `0.4.0` — **19** context-menu features |
+| **Ableton Extensions API** | `1.0.0` (`minimumApiVersion` in `manifest.json`) |
+| **Ableton SDK** | `@ableton-extensions/sdk` **1.0.0-beta.0** |
+| **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` **^2.51.0** |
+| **Live requirement** | **Live 12.4 Alpha/Beta** (Centercode) with Extensions enabled |
+| **Node.js** (dev/build only) | **≥ 24.14.1** |
+
+> Extensions are not available in retail Live builds today. You need a Live 12.4 program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
+
+### What's new in v0.4.0
+
+See [CHANGELOG.md](CHANGELOG.md#v040) for full release notes.
+
+- **Stem separation** — 2- or 6-stem layout → new audio tracks with balanced mixer levels
+- **Instant voice clone** — from clip or arrangement audio; saved to `elevenlabs-config.json`
+- **Forced alignment → MIDI** — your lyrics + audio → precise lyric marker notes
+- **Pronunciation rules** — custom word aliases, auto-applied to subsequent TTS
+- **Refactor** — shared arrangement helpers, voice cache, persisted storage, clearer API errors in modals
+
+---
+
+## For extension users
+
+### What you can do
+
+Right-click clips, tracks, slots, devices, or selections in Live to access ElevenLabs workflows. Generated audio is imported into your Live Set automatically.
+
+| Category | Actions | Where |
+|----------|---------|-------|
+| **Generate** | TTS, SFX, Music, Dialogue | Clip slot, arrangement selection |
+| **Batch** | TTS to multiple session slots | Multi-selected clip slots |
+| **Transform** | Voice changer, vocal isolation | Arrangement selection |
+| **Stems** | Separate into 2 or 6 stems → new tracks | Audio clip, arrangement selection |
+| **Transcribe** | Scribe STT (text modal) | Audio clip, arrangement selection |
+| **Lyrics → MIDI** | Scribe word timestamps → MIDI markers | Audio clip, arrangement selection |
+| **Align lyrics** | Forced alignment with your transcript → MIDI | Audio clip, arrangement selection |
+| **Samples** | TTS / SFX into Simpler | Simpler device |
+| **Drums** | SFX into drum rack pad | Drum rack (by MIDI note) |
+| **Voice** | Library picker in modals | TTS, voice changer, dialogue |
+| **Clone voice** | Instant voice clone from audio | Audio clip, arrangement selection |
+| **Pronunciation** | Custom word pronunciation for TTS | Audio track (any) |
+
+**v0.4.0** arrangement TTS also applies light post-import FX (track volume + reverb mix when available).
+
+### Prerequisites
+
+1. **ElevenLabs account** with API access — [elevenlabs.io](https://elevenlabs.io)
+2. **Live 12.4 Alpha/Beta** with extensions enabled
+3. An **API key** (see below)
+
+### Storage directory & API key
+
+The extension needs an ElevenLabs API key and a **storage directory** — a folder on disk that Live’s Extension Host can read and write. That folder holds your key (optional file-based setup) and persisted extension settings.
+
+#### Where to keep `api-key.txt`
+
+Create a folder **outside** the extension git repo (do not commit secrets). Put a single-line file named `api-key.txt` in that folder:
+
+```text
+C:\Users\You\Documents\ElevenLabs\api-key.txt     # Windows example
+/Users/you/Documents/ElevenLabs/api-key.txt       # macOS example
+```
+
+The file should contain **only** your API key (one line, no quotes, no extra spaces). Example:
+
+```text
+sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+You can use any path you prefer — e.g. `~/ElevenLabs/`, a cloud-synced folder, or a parent folder next to your clone when developing. What matters is that the **same folder** is passed as `--storage-directory` (or via `.env`) when you launch the extension.
+
+#### How to configure the storage directory
+
+Tell the Extension Host which folder to use:
+
+| How you run the extension | What to set |
+|---------------------------|-------------|
+| **`npm start`** (development) | `ELEVENLABS_STORAGE_DIRECTORY` in project `.env` (see [Getting started](#getting-started-git--github)) |
+| **`extensions-cli run`** | `--storage-directory /path/to/your/folder` |
+| **Either** | Environment variable `ELEVENLABS_STORAGE_DIRECTORY` (absolute path recommended) |
+
+Example `.env` in the project root (gitignored):
+
+```env
+EXTENSION_HOST_PATH=C:\Path\To\Live\...\ExtensionHostNodeModule.node
+ELEVENLABS_STORAGE_DIRECTORY=C:\Users\You\Documents\ElevenLabs
+# Optional — defaults to {storage}/.elevenlabs-temp
+# ELEVENLABS_TEMP_DIRECTORY=C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp
+```
+
+`npm start` reads `.env`, resolves the storage path, and passes `--storage-directory` and `--temp-directory` to `extensions-cli` automatically. If `ELEVENLABS_STORAGE_DIRECTORY` is unset, it looks for `api-key.txt` in the parent of the project folder, then in the project root (developer convenience only).
+
+Manual launch (same paths as above):
+
+```bash
+extensions-cli run --storage-directory "C:\Users\You\Documents\ElevenLabs" --temp-directory "C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp"
+```
+
+#### How the API key is resolved
+
+At runtime the extension looks for a key in this order:
+
+1. Environment variable `ELEVENLABS_API_KEY` (if set in the Extension Host process)
+2. File `{storageDirectory}/api-key.txt`
+
+If neither is found, features show an error asking you to configure a key.
+
+**Never commit your API key.** Do not place `api-key.txt` inside the repo or add it to git. Use a personal folder + `ELEVENLABS_STORAGE_DIRECTORY`, or set `ELEVENLABS_API_KEY` only in your local shell / `.env` (gitignored).
+
+### Extension Host compatibility
+
+Live's Extension Host omits some Web APIs (`Response`, `URL`, native `FormData`, etc.). The bundle uses a minimal Node shim banner plus `formdata-polyfill` for non-file requests. **File uploads** (stem separation, STT, voice clone) use manual multipart in `src/multipart-upload.ts` because `fetch` + the FormData polyfill drops file parts. See [AGENTS.md](AGENTS.md) before changing the build or upload path.
+
+### ElevenLabs plan limits
+
+Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem separation**). On a free tier, those actions show an error dialog instead of crashing — e.g. `Music API is not available for free users`. TTS and SFX typically work on free/creator tiers depending on your quota.
+
+### Install & run (pre-built `.ablx`)
+
+Download `elevenlabs-ableton-0.4.0.ablx` from a [GitHub Release](CHANGELOG.md) (or run `npm run package` locally).
+
+1. Open **Live → Preferences → Extensions**
+2. **Drag and drop** the `.ablx` onto the Extensions page
+3. Enable the extension in the list
+4. Configure your [API key and storage directory](#storage-directory--api-key)
+5. Right-click in Live — menu items are prefixed with **(ElevenLabs)**
+
+Developer Mode is **not** required for installed `.ablx` files; it is only needed when running from source via `npm start` / `extensions-cli run`.
+
+### Persisted settings (in your storage directory)
+
+When a storage directory is configured, the extension also reads/writes:
+
+| File | Contents |
+|------|----------|
+| `api-key.txt` | Your API key (optional if you use `ELEVENLABS_API_KEY` instead) |
+| `elevenlabs-config.json` | Cloned voice IDs, pronunciation dictionaries, active dictionary |
+
+Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs-temp`** by default (or `ELEVENLABS_TEMP_DIRECTORY` if set). That folder is safe to delete; it is recreated as needed.
+
+---
+
+## Features by release
+
+| Version | Highlights |
+|---------|------------|
+| **0.1.0** | TTS → clip slot & arrangement |
+| **0.2.0** | SFX, music, batch TTS, voice changer, vocal isolation, Scribe, Simpler workflows, post-import FX |
+| **0.3.0** | Voice library picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
+| **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules |
+
+Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
+
+---
+
+## Roadmap
+
+### Shipped (v0.4.0)
+
+- Music stem separation → multi-track with mixer balance  
+- Instant voice clone (persisted)  
+- Forced alignment → MIDI lyric markers  
+- Pronunciation dictionary rules (auto-applied to TTS)  
+
+### Planned (v0.5.0+)
+
+| Priority | Feature |
+|----------|---------|
+| High | Settings / voice manager (cloned voices + pronunciation) |
+| High | Voice picker search + pagination |
+| Medium | TTS model picker + character/usage hint |
+| Medium | TTS timestamps → MIDI lyric markers |
+| Later | Voice design, dubbing, cue-point TTS |
+
+Details: [docs/roadmap.md](docs/roadmap.md)
+
+---
+
+## For developers
+
+### Architecture (short)
+
+```text
+Context menu → command → modal (optional) → progress dialog
+  → ElevenLabsClient (@elevenlabs/elevenlabs-js)
+  → temp file → importIntoProject → createAudioClip / replaceSample / MidiClip.notes
+```
+
+Outbound audio (voice change, STT, stems, clone): `renderPreFxAudio` → ElevenLabs file APIs.
+
+All dependencies are **bundled** into `dist/extension.js` (~8 MB) via esbuild. The Extension Host does not resolve `node_modules` at runtime.
+
+### Project structure
+
+```text
+elevenlabs-ableton/
+├── manifest.json          # Extension metadata + minimumApiVersion
+├── package.json
+├── build.ts               # esbuild bundle (CJS, .html as text)
+├── src/
+│   ├── extension.ts     # activate(), commands, context menus
+│   ├── version.ts         # EXTENSION_VERSION + FEATURE_VERSIONS
+│   ├── elevenlabs-client.ts
+│   ├── pipelines.ts
+│   ├── audio-io.ts / live-io.ts / midi-io.ts / …
+│   ├── multipart-upload.ts # Manual multipart for Extension Host file APIs
+│   ├── ui-branding.ts     # Modal logo + shared dark theme
+│   ├── ui.ts + ui/*.html  # Live webview modals
+│   └── ui/assets/         # elevenapi-logo.png, ableton-logo.png (README + bundled modals)
+├── vendor/                # Ableton SDK + CLI .tgz (see setup below)
+├── docs/                  # BMad project knowledge
+├── bmad-output/           # Sprint / implementation artifacts
+├── dist/                  # Built extension (gitignored — run npm run build)
+├── CHANGELOG.md
+└── LICENSE                # GPL-3.0-or-later
+```
+
+Deeper context: [docs/project-context.md](docs/project-context.md), [../ABLETON-ELEVENLABS-RESEARCH.md](../ABLETON-ELEVENLABS-RESEARCH.md).
+
+### SDK & dependency versions
+
+| Package | Version | Role |
+|---------|---------|------|
+| `@ableton-extensions/sdk` | `1.0.0-beta.0` (vendor `.tgz`) | Live object model, UI, resources |
+| `@ableton-extensions/cli` | `1.0.0-beta.0` (vendor `.tgz`) | `extensions-cli run` / `package` |
+| `@elevenlabs/elevenlabs-js` | `^2.51.0` | ElevenLabs API (bundled) |
+| `fflate` | `^0.8.3` | Stem separation ZIP extraction |
+| `esbuild` | `0.28.0` | Production bundle |
+| `typescript` | `^5.9.3` | Type-check (`skipLibCheck: true`) |
+
+Ableton extensions docs: [ableton.github.io/extensions-sdk](https://ableton.github.io/extensions-sdk/)
+
+---
+
+## Getting started (Git / GitHub)
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YOUR_ORG/elevenlabs-ableton.git
+cd elevenlabs-ableton
+```
+
+### 2. Install Node dependencies
+
+```bash
+npm install
+```
+
+Requires **Node.js ≥ 24.14.1** (matches `package.json` `engines`).
+
+### 3. Add Ableton SDK vendor packages
+
+`package.json` references local tarballs (not published to npm):
+
+```text
+vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz
+vendor/ableton-extensions-cli-1.0.0-beta.0.tgz
+```
+
+Obtain these from the [Ableton Extensions SDK](https://ableton.github.io/extensions-sdk/) release (or your SDK dev kit) and place them in `vendor/` before `npm install`. Without them, install will fail.
+
+### 4. Configure the Extension Host path
+
+Create or edit `.env` in the project root (gitignored):
+
+```env
+EXTENSION_HOST_PATH=C:\Path\To\Live\Resources\Extensions\ExtensionHostNodeModule.node
+```
+
+The path is set when you scaffold with `@ableton-extensions/create-extension`; adjust if Live is installed elsewhere.
+
+### 5. Configure storage directory & API key
+
+See [Storage directory & API key](#storage-directory--api-key) for the full user-facing guide. Minimal developer setup:
+
+1. Create a folder **outside** the repo, e.g. `C:\Users\You\Documents\ElevenLabs`
+2. Save your key as `api-key.txt` in that folder (one line)
+3. Add to `.env`:
+
+```env
+ELEVENLABS_STORAGE_DIRECTORY=C:\Users\You\Documents\ElevenLabs
+```
+
+**Alternative — environment variable only** (no `api-key.txt`):
+
+```bash
+# PowerShell
+$env:ELEVENLABS_API_KEY = "your-key-here"
+
+# bash
+export ELEVENLABS_API_KEY=your-key-here
+```
+
+You still need `--storage-directory` (or `ELEVENLABS_STORAGE_DIRECTORY`) if you want cloned voices and pronunciation rules persisted in `elevenlabs-config.json`.
+
+### 6. Build and run in Live
+
+```bash
+# Development (source maps, not minified) — uses .env storage + temp paths
+npm start
+
+# Or explicitly (replace with your storage folder from step 5):
+npm run build:dev
+extensions-cli run --storage-directory "C:\Users\You\Documents\ElevenLabs" --temp-directory "C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp"
+```
+
+```bash
+# Production bundle
+npm run build
+
+# Package for distribution (.ablx)
+npm run package
+```
+
+### 7. Enable in Live
+
+1. Open **Live 12.4 Alpha/Beta**
+2. Preferences → **Extensions** → enable **Developer Mode**
+3. Run `npm start` (or `extensions-cli run`) so Live loads the extension
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.4.0 active — 19 features`
+
+---
+
+## Development workflow
+
+| Task | Command / location |
+|------|-------------------|
+| Type-check | `npx tsc --noEmit` (part of `npm run build`) |
+| Dev build + run | `npm start` |
+| Production build | `npm run build` |
+| Package `.ablx` | `npm run package` |
+| Bump release | `src/version.ts` + `manifest.json` + `package.json` + `CHANGELOG.md` |
+| Add a feature | Register in `FEATURE_VERSIONS` in `version.ts` |
+
+### Adding a new feature (convention)
+
+1. API wrapper in `src/elevenlabs-client.ts`
+2. Pipeline in `src/pipelines.ts` (use `withElevenLabsProgress`)
+3. Modal in `ui/*.html` + prompt in `src/ui.ts`
+4. Command + context menu in `src/extension.ts`
+5. Document in `CHANGELOG.md` and bump version
+
+### BMad Method
+
+This project uses [BMad](https://docs.bmad-method.org/) for planning artifacts:
+
+- Agent entry: [AGENTS.md](AGENTS.md)
+- Sprint status: `bmad-output/planning-artifacts/sprint-status.yaml`
+- Team config overrides: `_bmad/custom/config.toml`
+
+---
+
+## npm scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm start` | `build:dev` then `extensions-cli run` |
+| `npm run build` | Type-check + production bundle → `dist/extension.js` (runs `check:build` after) |
+| `npm run build:dev` | Type-check + dev bundle (source maps) |
+| `npm run package` | Production build + create `.ablx` archive |
+| `npm run check:build` | Post-build: version sync, bundle markers, unit checks (no API key) |
+| `npm run check:api` | Above + ElevenLabs API smoke (TTS + voices; needs API key) |
+| `npm run check:api:full` | Above + SFX test (extra API cost) |
+
+```bash
+# After clone — validate before opening Live
+npm install
+npm run build
+npm run check:api    # optional; requires ELEVENLABS_API_KEY
+```
+
+See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roadmap.md](docs/roadmap.md).
+
+---
+
+## Git hygiene
+
+**Committed**
+
+- Source (`src/`, `ui/`, `build.ts`, `manifest.json`, `package.json`)
+- Docs (`docs/`, `CHANGELOG.md`, `README.md`, `AGENTS.md`, `LICENSE`)
+- BMad config (`_bmad/custom/`, `bmad-output/` planning artifacts)
+- `vendor/*.tgz` — if your repo policy allows vendoring the SDK; otherwise document download in README only
+
+**Gitignored** (see `.gitignore`)
+
+- `node_modules/`
+- `dist/`
+- `.env`
+- `*.ablx`, `*.log`, `*.tsbuildinfo`
+
+**Never commit**
+
+- `ELEVENLABS_API_KEY` or `api-key.txt`
+- Personal `EXTENSION_HOST_PATH` if machine-specific (use `.env` locally)
+
+### Suggested `.gitignore` additions for contributors
+
+If you keep secrets or local Live paths outside `.env`:
+
+```gitignore
+api-key.txt
+elevenlabs-config.json
+```
+
+---
+
+## Limitations
+
+- **No streaming import** — full audio file must be written before Live imports it  
+- **No in-place clip file swap** — new clips or Simpler `replaceSample` only  
+- **No real-time monitor** of ElevenLabs output inside Live  
+- **Alpha/Beta Live only** — retail Live does not load extensions yet  
+- **Network required** — all ElevenLabs features need API connectivity  
+- **ElevenLabs billing** — usage is metered per ElevenLabs plan (characters, minutes, etc.)
+
+---
+
+## Documentation index
+
+| Document | Audience |
+|----------|----------|
+| [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.4.0) |
+| [LICENSE](LICENSE) | GPL-3.0-or-later terms |
+| [docs/roadmap.md](docs/roadmap.md) | Planned features |
+| [docs/v0.4.0-features.md](docs/v0.4.0-features.md) | Latest feature spec |
+| [docs/code-review-notes.md](docs/code-review-notes.md) | Architecture review notes |
+| [docs/project-context.md](docs/project-context.md) | Lean dev/agent context |
+| [../ABLETON-ELEVENLABS-RESEARCH.md](../ABLETON-ELEVENLABS-RESEARCH.md) | Full ElevenLabs ↔ Ableton research |
+| [AGENTS.md](AGENTS.md) | Cursor / BMad agents |
+
+---
+
+## License & attribution
+
+- **License:** [GNU General Public License v3.0 or later](LICENSE) — Copyright (C) 2026 Tom Carlile
+- **Author:** Tom Carlile (`manifest.json`)
+- **Ableton Extensions SDK** — [Ableton](https://www.ableton.com)
+- **ElevenLabs API** — [ElevenLabs](https://elevenlabs.io)
+
+---
+
+## Support & contributing
+
+1. Check [CHANGELOG.md](CHANGELOG.md) and [docs/roadmap.md](docs/roadmap.md) for known scope  
+2. Open a GitHub issue with Live version, extension version (`src/version.ts`), and steps to reproduce  
+3. PRs: follow the feature convention above; bump `FEATURE_VERSIONS` and `CHANGELOG.md`  
+
+**Quick sanity check after clone:**
+
+```bash
+npm install
+npm run build
+# expect: dist/extension.js ~8 MB, exit 0
+```

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Align Lyrics</title>
+  <script>
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) window.webkit.messageHandlers.live.postMessage(message);
+      else if (window.chrome?.webview) window.chrome.webview.postMessage(message);
+    }
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+    function submit() {
+      const transcript = document.getElementById("transcript").value.trim();
+      if (!transcript) return;
+      closeWithResult({ cancelled: false, transcript });
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("transcript").focus();
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWithResult({ cancelled: true }); });
+    });
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; } *:not(dialog) { margin: 0; }
+    textarea, button { font: inherit; }
+    :root { --c-bg: hsl(0,0%,21%); --c-input-bg: hsl(0,0%,12%); --c-text: hsl(0,0%,71%); --c-text-secondary: hsl(0,0%,41%); --c-border: hsl(0,0%,7%); --c-button-bg: hsl(0,0%,16%); --c-accent: hsl(31,100%,67%); }
+    html { background: var(--c-bg); color: var(--c-text); font-family: "AbletonSansSmall", sans-serif; font-size: 11.5px; height: 100%; }
+    body { height: 100%; padding: 1.25em; display: flex; flex-direction: column; gap: 0.75em; }
+    label { color: var(--c-text-secondary); }
+    textarea { background: var(--c-input-bg); color: var(--c-text); border: 1px solid var(--c-border); padding: 0.4em 0.5em; width: 100%; min-height: 8em; resize: vertical; }
+    p { color: var(--c-text-secondary); line-height: 1.4; }
+    .buttons { display: flex; justify-content: flex-end; gap: 0.5em; margin-top: auto; }
+    button { background: var(--c-button-bg); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 1em; padding: 0.35em 1em; cursor: pointer; }
+    button.primary:active { background: var(--c-accent); color: #111; }
+  </style>
+</head>
+<body>
+  <p>Paste the exact lyrics transcript to force-align against the audio. Creates MIDI marker notes on a new track.</p>
+  <label for="transcript">Lyrics transcript</label>
+  <textarea id="transcript" placeholder="Enter the exact words sung or spoken…"></textarea>
+  <div class="buttons">
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Align</button>
+  </div>
+</body>
+</html>

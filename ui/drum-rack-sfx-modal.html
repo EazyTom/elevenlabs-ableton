@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ElevenLabs Drum Rack SFX</title>
+  <script>
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) {
+        window.webkit.messageHandlers.live.postMessage(message);
+      } else if (window.chrome?.webview) {
+        window.chrome.webview.postMessage(message);
+      }
+    }
+
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+
+    function submit() {
+      const text = document.getElementById("text").value.trim();
+      const midiNote = parseInt(document.getElementById("midiNote").value, 10);
+      const duration = parseFloat(document.getElementById("duration").value);
+      const influence = parseFloat(document.getElementById("influence").value);
+      if (!text || !Number.isFinite(midiNote)) return;
+      closeWithResult({
+        cancelled: false,
+        text,
+        midiNote,
+        durationSeconds: Number.isFinite(duration) ? duration : undefined,
+        promptInfluence: Number.isFinite(influence) ? influence : undefined,
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("text").focus();
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeWithResult({ cancelled: true });
+      });
+    });
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    *:not(dialog) { margin: 0; }
+    input, button, textarea { font: inherit; }
+
+    :root {
+      --c-bg: hsl(0, 0%, 21%);
+      --c-input-bg: hsl(0, 0%, 12%);
+      --c-text: hsl(0, 0%, 71%);
+      --c-text-secondary: hsl(0, 0%, 41%);
+      --c-border: hsl(0, 0%, 7%);
+      --c-button-bg: hsl(0, 0%, 16%);
+      --c-accent: hsl(31, 100%, 67%);
+    }
+
+    html {
+      background: var(--c-bg);
+      color: var(--c-text);
+      font-family: "AbletonSansSmall", sans-serif;
+      font-size: 11.5px;
+      height: 100%;
+    }
+
+    body {
+      height: 100%;
+      padding: 1.25em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25em;
+      color: var(--c-text-secondary);
+    }
+
+    textarea, input {
+      background: var(--c-input-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      padding: 0.4em 0.5em;
+      width: 100%;
+      outline: none;
+    }
+
+    textarea { min-height: 4em; resize: vertical; }
+    .row { display: flex; gap: 0.75em; }
+    .row label { flex: 1; }
+
+    p { color: var(--c-text-secondary); line-height: 1.4; }
+
+    .buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5em;
+      margin-top: auto;
+    }
+
+    button {
+      background: var(--c-button-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: 1em;
+      padding: 0.35em 1em;
+      cursor: pointer;
+    }
+
+    button.primary:active { background: var(--c-accent); color: #111; }
+  </style>
+</head>
+<body>
+  <p>Generate a one-shot and load it into the Simpler on the selected drum pad (MIDI note 0–127).</p>
+
+  <label for="midiNote">Pad MIDI note (e.g. 36 = C1 kick)</label>
+  <input id="midiNote" type="number" min="0" max="127" placeholder="36" />
+
+  <label for="text">Sound effect prompt</label>
+  <textarea id="text" placeholder="808 kick, snare crack, hi-hat…"></textarea>
+
+  <div class="row">
+    <label for="duration">Duration (sec)
+      <input id="duration" type="number" min="0.5" max="22" step="0.5" placeholder="2" />
+    </label>
+    <label for="influence">Prompt influence
+      <input id="influence" type="number" min="0" max="1" step="0.1" placeholder="0.3" />
+    </label>
+  </div>
+
+  <div class="buttons">
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Generate</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "name": "elevenlabs-ableton",
+  "version": "0.4.0",
+  "license": "GPL-3.0-or-later",
+  "main": "dist/extension.js",
+  "engines": {
+    "node": ">=24.14.1"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && tsx build.ts --production",
+    "build:dev": "tsc --noEmit && tsx build.ts",
+    "start": "npm run build:dev && tsx scripts/start-dev.ts",
+    "package": "npm run build && extensions-cli package",
+    "check:build": "tsx scripts/post-build-check.ts --skip-api",
+    "check:api": "tsx scripts/post-build-check.ts",
+    "check:api:full": "tsx scripts/post-build-check.ts --full",
+    "postbuild": "npm run check:build"
+  },
+  "dependencies": {
+    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz",
+    "@elevenlabs/elevenlabs-js": "^2.51.0",
+    "fflate": "^0.8.3",
+    "formdata-polyfill": "^4.0.10"
+  },
+  "devDependencies": {
+    "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",
+    "@types/node": "^24.1.0",
+    "esbuild": "0.28.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.0": true,
+    "esbuild@0.25.12": true
+  }
+}

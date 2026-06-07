@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pronunciation Rule</title>
+  <script>
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) window.webkit.messageHandlers.live.postMessage(message);
+      else if (window.chrome?.webview) window.chrome.webview.postMessage(message);
+    }
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+    function submit() {
+      const dictionaryName = document.getElementById("dictName").value.trim();
+      const stringToReplace = document.getElementById("word").value.trim();
+      const alias = document.getElementById("alias").value.trim();
+      const setActive = document.getElementById("setActive").checked;
+      if (!dictionaryName || !stringToReplace || !alias) return;
+      closeWithResult({ cancelled: false, dictionaryName, stringToReplace, alias, setActive });
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("word").focus();
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWithResult({ cancelled: true }); });
+    });
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; } *:not(dialog) { margin: 0; }
+    input, button { font: inherit; }
+    :root { --c-bg: hsl(0,0%,21%); --c-input-bg: hsl(0,0%,12%); --c-text: hsl(0,0%,71%); --c-text-secondary: hsl(0,0%,41%); --c-border: hsl(0,0%,7%); --c-button-bg: hsl(0,0%,16%); --c-accent: hsl(31,100%,67%); }
+    html { background: var(--c-bg); color: var(--c-text); font-family: "AbletonSansSmall", sans-serif; font-size: 11.5px; height: 100%; }
+    body { height: 100%; padding: 1.25em; display: flex; flex-direction: column; gap: 0.75em; }
+    label { display: flex; flex-direction: column; gap: 0.25em; color: var(--c-text-secondary); }
+    input { background: var(--c-input-bg); color: var(--c-text); border: 1px solid var(--c-border); padding: 0.4em 0.5em; width: 100%; }
+    .checkbox { flex-direction: row; align-items: center; gap: 0.5em; color: var(--c-text); }
+    p { color: var(--c-text-secondary); line-height: 1.4; }
+    .buttons { display: flex; justify-content: flex-end; gap: 0.5em; margin-top: auto; }
+    button { background: var(--c-button-bg); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 1em; padding: 0.35em 1em; cursor: pointer; }
+    button.primary:active { background: var(--c-accent); color: #111; }
+  </style>
+</head>
+<body>
+  <p>Create a pronunciation dictionary rule. When active, it applies to subsequent TTS generations.</p>
+  <label for="dictName">Dictionary name</label>
+  <input id="dictName" type="text" placeholder="Live Set Pronunciation" />
+  <label for="word">Word to replace</label>
+  <input id="word" type="text" placeholder="Ableton" />
+  <label for="alias">Pronunciation (alias)</label>
+  <input id="alias" type="text" placeholder="ay-bull-tawn" />
+  <label class="checkbox"><input id="setActive" type="checkbox" checked /> Set as active dictionary for TTS</label>
+  <div class="buttons">
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Save</button>
+  </div>
+</body>
+</html>
