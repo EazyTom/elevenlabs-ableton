@@ -1,14 +1,13 @@
 <div align="center">
-
 <img src="ui/assets/ableton-logo.png" alt="" height="50" />
 &nbsp;&nbsp;
 <img src="ui/assets/elevenapi-logo.png" alt="" height="50" />
-
 </div>
+<br>
 
 # Ableton Extension: elevenlabs-ableton
 
-Bring **ElevenLabs** AI audio into **Ableton Live** — text-to-speech, sound effects, music, voice transformation, transcription, stem separation, and more — directly from Live context menus.
+Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
 **Current release: [v0.4.0](CHANGELOG.md#v040)** · [Changelog](CHANGELOG.md) · [License (GPL-3.0+)](LICENSE)
 
@@ -32,18 +31,20 @@ See [CHANGELOG.md](CHANGELOG.md#v040) for full release notes.
 - **Forced alignment → MIDI** — your lyrics + audio → precise lyric marker notes
 - **Pronunciation rules** — custom word aliases, auto-applied to subsequent TTS
 - **Refactor** — shared arrangement helpers, voice cache, persisted storage, clearer API errors in modals
+- **SFX & Music modals** — duration/variant sliders, model pickers (SFX v2 / Music v2 defaults), seamless loop, prompt randomizers; music multi-variant auto-load to consecutive session clip slots
+- **Drum rack SFX** — model/loop/slider controls, auto-load variants to pads (C0+), build full 7-piece kit from one prompt
 
 ---
 
-## For extension users
+## ElevenLabs API Ableton Extension
 
-### What you can do
+### Current Capabilities
 
 Right-click clips, tracks, slots, devices, or selections in Live to access ElevenLabs workflows. Generated audio is imported into your Live Set automatically.
 
 | Category | Actions | Where |
 |----------|---------|-------|
-| **Generate** | TTS, SFX, Music, Dialogue | Clip slot, arrangement selection |
+| **Generate** | TTS, SFX, Music, Dialogue — modals with sliders, models, loops, variants (see [below](#sfx-music--drum-rack-modals)) | Clip slot, arrangement selection |
 | **Batch** | TTS to multiple session slots | Multi-selected clip slots |
 | **Transform** | Voice changer, vocal isolation | Arrangement selection |
 | **Stems** | Separate into 2 or 6 stems → new tracks | Audio clip, arrangement selection |
@@ -51,12 +52,63 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 | **Lyrics → MIDI** | Scribe word timestamps → MIDI markers | Audio clip, arrangement selection |
 | **Align lyrics** | Forced alignment with your transcript → MIDI | Audio clip, arrangement selection |
 | **Samples** | TTS / SFX into Simpler | Simpler device |
-| **Drums** | SFX into drum rack pad | Drum rack (by MIDI note) |
+| **Drums** | SFX into drum rack — single pad, auto-load variants, or full kit | Drum rack |
 | **Voice** | Library picker in modals | TTS, voice changer, dialogue |
 | **Clone voice** | Instant voice clone from audio | Audio clip, arrangement selection |
 | **Pronunciation** | Custom word pronunciation for TTS | Audio track (any) |
 
 **v0.4.0** arrangement TTS also applies light post-import FX (track volume + reverb mix when available).
+
+### SFX, Music & Drum Rack modals
+
+Generation modals share the extension’s dark theme, **Randomize** prompt button, and progress feedback. Options below apply to **Generate SFX**, **Generate Music**, and **Drum Rack SFX** unless noted.
+
+#### Sound effects (`Generate SFX`)
+
+Right-click a **clip slot**, **arrangement selection**, or **Simpler** → **Generate SFX (ElevenLabs)**.
+
+| Control | Description |
+|---------|-------------|
+| **Randomize** | Fills the prompt with a random descriptive phrase (word banks + templates; loop adds a seamless-loop suffix). |
+| **Duration** | Slider **0.5–22 s** (default 3 s). |
+| **Variants** | Slider **1–10** separate API generations. When > 1, a **variant picker** opens so you choose which take to import (Simpler/arrangement). |
+| **Model** | **SFX v1** or **SFX v2** (default). Passed to the ElevenLabs text-to-sound API. |
+| **Seamless Loop** | Enables loop generation (API uses v2 when loop is on). |
+| **Prompt influence** | Optional **0–1** (default 0.3). |
+
+Imported clips respect the loop toggle (Session clip **Loop** is set in Live when enabled).
+
+#### Music (`Generate Music`)
+
+Right-click an **audio clip slot** or **arrangement selection** → **Generate Music (ElevenLabs)**. Requires a **paid ElevenLabs plan**.
+
+| Control | Description |
+|---------|-------------|
+| **Duration** | Slider **3–300 s** (default 30 s). |
+| **Description** | Free-text prompt; optional if at least one **genre** is selected. |
+| **Randomize** | Random rich music prompt (genres, instruments, mood, production, cinematic flavor). |
+| **Tempo** | Optional BPM slider (60–180) merged into the composed prompt. |
+| **Genres** | Single grid: electronic (Trap, House, Techno, …), cinematic styles (Epic, Horror, Sci-Fi, Bollywood, …), and styles such as Jazz, Folk, 80s Retro, Acoustic, etc. |
+| **Mood toggles** | Instrumental, High energy, Dark / moody, Lo-fi. |
+| **Variants** | Slider **1–10**. **Session View:** each variant loads into the **selected clip slot and consecutive slots below** on the same track (no picker). **Arrangement:** multi-variant still uses the variant picker. |
+| **Model** | **Music v1** or **Music v2** (default). |
+| **Seamless Loop** | Uses API `loop` generation mode; clip **Loop** is set in Live on import. |
+
+The composed prompt merges selected genres, tempo, mood toggles, and your description before calling the music API (direct `/v1/music` POST for v2 / loop support).
+
+#### Drum rack SFX (`Drum Rack` context menu)
+
+Right-click a **Drum Rack** → **Generate SFX into Drum Rack (ElevenLabs)**. Includes the same **Duration**, **Variants**, **Model**, **Loop**, and **Randomize** controls as SFX, plus:
+
+| Mode | Description |
+|------|-------------|
+| **Single pad** | Pick a pad (MIDI note with Simpler); one SFX or variant picker when variants > 1. |
+| **Auto-load variants to pads** | Generates up to **10** variants and loads each onto **consecutive pads from C0** (MIDI 0 upward), skipping the picker. |
+| **Build entire drum kit** | Seven kit pieces (kick, snare, hats, rimshot, clap, 808) from your prompt style → pads **C0–F♯0** (MIDI 0–6). Missing Simplers are created automatically. |
+
+Each variant or kit piece is a separate ElevenLabs API call (uses credits accordingly).
+
+---
 
 ### Prerequisites
 
@@ -163,7 +215,7 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.1.0** | TTS → clip slot & arrangement |
 | **0.2.0** | SFX, music, batch TTS, voice changer, vocal isolation, Scribe, Simpler workflows, post-import FX |
 | **0.3.0** | Voice library picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
-| **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules |
+| **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules; enhanced SFX/Music/Drum Rack modals |
 
 Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
 
@@ -177,6 +229,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 - Instant voice clone (persisted)  
 - Forced alignment → MIDI lyric markers  
 - Pronunciation dictionary rules (auto-applied to TTS)  
+- SFX / Music / Drum Rack modals — sliders, models, loops, randomizers, music session multi-variant clip loading  
 
 ### Planned (v0.5.0+)
 
@@ -192,7 +245,7 @@ Details: [docs/roadmap.md](docs/roadmap.md)
 
 ---
 
-## For developers
+## Developers Guide
 
 ### Architecture (short)
 
@@ -388,48 +441,6 @@ npm run check:api    # optional; requires ELEVENLABS_API_KEY
 
 See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roadmap.md](docs/roadmap.md).
 
----
-
-## Git hygiene
-
-**Committed**
-
-- Source (`src/`, `ui/`, `build.ts`, `manifest.json`, `package.json`)
-- Docs (`docs/`, `CHANGELOG.md`, `README.md`, `AGENTS.md`, `LICENSE`)
-- BMad config (`_bmad/custom/`, `bmad-output/` planning artifacts)
-- `vendor/*.tgz` — if your repo policy allows vendoring the SDK; otherwise document download in README only
-
-**Gitignored** (see `.gitignore`)
-
-- `node_modules/`
-- `dist/`
-- `.env`
-- `*.ablx`, `*.log`, `*.tsbuildinfo`
-
-**Never commit**
-
-- `ELEVENLABS_API_KEY` or `api-key.txt`
-- Personal `EXTENSION_HOST_PATH` if machine-specific (use `.env` locally)
-
-### Suggested `.gitignore` additions for contributors
-
-If you keep secrets or local Live paths outside `.env`:
-
-```gitignore
-api-key.txt
-elevenlabs-config.json
-```
-
----
-
-## Limitations
-
-- **No streaming import** — full audio file must be written before Live imports it  
-- **No in-place clip file swap** — new clips or Simpler `replaceSample` only  
-- **No real-time monitor** of ElevenLabs output inside Live  
-- **Alpha/Beta Live only** — retail Live does not load extensions yet  
-- **Network required** — all ElevenLabs features need API connectivity  
-- **ElevenLabs billing** — usage is metered per ElevenLabs plan (characters, minutes, etc.)
 
 ---
 

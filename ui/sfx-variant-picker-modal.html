@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ElevenLabs Voice</title>
+  <title>Pick SFX Variant</title>
   <script>
     function doSendMessage(message) {
       if (window.webkit?.messageHandlers?.live) {
@@ -18,32 +18,43 @@
     }
 
     function submit() {
-      const voiceId = document.getElementById("voiceId").value.trim()
-        || document.getElementById("voiceSelect").value.trim();
-      if (!voiceId) return;
-      closeWithResult({ cancelled: false, voiceId });
+      const sel = document.querySelector('input[name="variant"]:checked');
+      if (!sel) return;
+      closeWithResult({
+        cancelled: false,
+        variantIndex: parseInt(sel.value, 10),
+      });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("voiceId").focus();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
+        if (e.key === "Enter") submit();
       });
     });
   </script>
+  <style>
+    body { gap: 0.65em; overflow-y: auto; }
+    fieldset.variant-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
+      max-height: 16em;
+      overflow-y: auto;
+    }
+  </style>
 </head>
 <body>
-  <p>Select the target ElevenLabs voice for speech-to-speech conversion.</p>
+  <p class="hint">Each variant is a separate generation with the same prompt. Pick one to import.</p>
 
-  <label for="voiceSelect">Voice (from library)</label>
-  <select id="voiceSelect">{{VOICE_OPTIONS}}</select>
-
-  <label for="voiceId">Voice ID (override)</label>
-  <input id="voiceId" type="text" placeholder="Optional custom ID" />
+  <fieldset class="variant-list">
+    <legend>Variants</legend>
+    {{VARIANT_OPTIONS}}
+  </fieldset>
 
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
-    <button type="button" class="primary" onclick="submit()">Transform</button>
+    <button type="button" class="primary" onclick="submit()">Use selected</button>
   </div>
 </body>
 </html>

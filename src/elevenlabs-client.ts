@@ -3,7 +3,7 @@ import { createReadStream } from "fs";
 import { readFile } from "fs/promises";
 import path from "path";
 
-import { postMultipart, readAudioUpload } from "./multipart-upload.js";
+import { postJsonBinary, postMultipart, readAudioUpload } from "./multipart-upload.js";
 
 const CLIENT_API_KEY = Symbol.for("elevenlabs-ableton.apiKey");
 
@@ -22,18 +22,60 @@ export interface TtsRequest {
   voiceId?: string;
   modelId?: string;
   pronunciationDictionaryLocators?: PronunciationLocator[];
+  speed?: number;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
 }
+
+/** ElevenLabs default voice settings (matches web app defaults). */
+export const DEFAULT_TTS_SPEED = 1;
+export const DEFAULT_TTS_STABILITY = 0.5;
+export const DEFAULT_TTS_SIMILARITY = 0.75;
+export const DEFAULT_TTS_STYLE = 0;
+
+function buildTtsVoiceSettings(request: TtsRequest) {
+  const { speed, stability, similarityBoost, style } = request;
+  if (
+    speed === undefined &&
+    stability === undefined &&
+    similarityBoost === undefined &&
+    style === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    ...(speed !== undefined && { speed }),
+    ...(stability !== undefined && { stability }),
+    ...(similarityBoost !== undefined && { similarityBoost }),
+    ...(style !== undefined && { style }),
+  };
+}
+
+export const SFX_MODEL_V1 = "eleven_text_to_sound_v1";
+export const SFX_MODEL_V2 = "eleven_text_to_sound_v2";
+export type SfxModelId = typeof SFX_MODEL_V1 | typeof SFX_MODEL_V2;
+export const DEFAULT_SFX_MODEL: SfxModelId = SFX_MODEL_V2;
 
 export interface SfxRequest {
   text: string;
   durationSeconds?: number;
   promptInfluence?: number;
+  loop?: boolean;
+  modelId?: SfxModelId;
 }
+
+export const MUSIC_MODEL_V1 = "music_v1";
+export const MUSIC_MODEL_V2 = "music_v2";
+export type MusicModelId = typeof MUSIC_MODEL_V1 | typeof MUSIC_MODEL_V2;
+export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V1;
 
 export interface MusicRequest {
   prompt: string;
   musicLengthMs?: number;
   forceInstrumental?: boolean;
+  modelId?: MusicModelId;
+  loop?: boolean;
 }
 
 export interface VoiceSummary {
@@ -137,6 +179,7 @@ export async function generateTts(client: ElevenLabsClient, request: TtsRequest)
     text: request.text,
     modelId: request.modelId ?? DEFAULT_MODEL_ID,
     outputFormat: "mp3_44100_128",
+    voiceSettings: buildTtsVoiceSettings(request),
     pronunciationDictionaryLocators: request.pronunciationDictionaryLocators?.map((loc) => ({
       pronunciationDictionaryId: loc.pronunciationDictionaryId,
       versionId: loc.versionId,
@@ -146,24 +189,30 @@ export async function generateTts(client: ElevenLabsClient, request: TtsRequest)
 }
 
 export async function generateSfx(client: ElevenLabsClient, request: SfxRequest): Promise<Uint8Array> {
+  const modelId =
+    request.loop ? SFX_MODEL_V2 : (request.modelId ?? DEFAULT_SFX_MODEL);
   const stream = await client.textToSoundEffects.convert({
     text: request.text,
     durationSeconds: request.durationSeconds,
     promptInfluence: request.promptInfluence ?? 0.3,
+    loop: request.loop ?? false,
+    modelId,
     outputFormat: "mp3_44100_128",
   });
   return streamToBytes(stream);
 }
 
 export async function generateMusic(client: ElevenLabsClient, request: MusicRequest): Promise<Uint8Array> {
-  const stream = await client.music.compose({
+  const body: Record<string, unknown> = {
     prompt: request.prompt,
-    musicLengthMs: request.musicLengthMs ?? 30_000,
-    forceInstrumental: request.forceInstrumental ?? false,
-    modelId: "music_v1",
-    outputFormat: "mp3_44100_128",
+    music_length_ms: request.musicLengthMs ?? 30_000,
+    force_instrumental: request.forceInstrumental ?? false,
+    model_id: request.modelId ?? DEFAULT_MUSIC_MODEL,
+    generation_mode: request.loop ? "loop" : "track",
+  };
+  return postJsonBinary(clientApiKey(client), "/v1/music", body, {
+    output_format: "mp3_44100_128",
   });
-  return streamToBytes(stream);
 }
 
 export async function convertVoice(

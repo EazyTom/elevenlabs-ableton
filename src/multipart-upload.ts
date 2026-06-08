@@ -149,6 +149,29 @@ export async function postMultipart(
   return new Uint8Array(await res.arrayBuffer());
 }
 
+/** JSON POST that returns binary audio (music compose, etc.). */
+export async function postJsonBinary(
+  apiKey: string,
+  pathname: string,
+  body: Record<string, unknown>,
+  query?: Record<string, string | undefined>,
+): Promise<Uint8Array> {
+  const res = await fetch(buildUrl(pathname, query), {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new ElevenLabsHttpError(res.status, await parseErrorBody(res));
+  }
+
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 export async function postMultipartJson<T>(
   apiKey: string,
   pathname: string,

@@ -13,6 +13,7 @@ export interface ImportClipArgs {
   startTime?: number;
   duration?: number;
   isWarped?: boolean;
+  looping?: boolean;
 }
 
 export function requireTempDirectory(context: ExtensionContext<"1.0.0">): string {
@@ -42,20 +43,25 @@ export async function importAndCreateClip(
   const imported = await context.resources.importIntoProject(sourcePath);
   const isWarped = args.isWarped ?? false;
 
+  let clip: AudioClip<"1.0.0">;
+
   if (target instanceof AudioTrack || target instanceof TakeLane) {
-    await target.createAudioClip({
+    clip = await target.createAudioClip({
       filePath: imported,
       startTime: args.startTime ?? 0,
       duration: args.duration,
       isWarped,
     });
-    return;
+  } else {
+    clip = await target.createAudioClip({
+      filePath: imported,
+      isWarped,
+    });
   }
 
-  await target.createAudioClip({
-    filePath: imported,
-    isWarped,
-  });
+  if (args.looping) {
+    clip.looping = true;
+  }
 }
 
 export async function replaceSimplerSample(

@@ -173,7 +173,13 @@ export function activate(activation: ActivationContext) {
     runSafe(async () => {
       const modal = await promptMusic(context);
       if (!modal) return;
-      await pipelineMusic(context, modal, resolveHandle(context, arg as Handle, ClipSlot), {});
+      await pipelineMusic(
+        context,
+        modal,
+        resolveHandle(context, arg as Handle, ClipSlot),
+        {},
+        "session",
+      );
     });
   });
 
@@ -184,7 +190,7 @@ export function activate(activation: ActivationContext) {
       if (!modal) return;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
-      await pipelineMusic(context, modal, track, arrangementClipArgs(selection));
+      await pipelineMusic(context, modal, track, arrangementClipArgs(selection), "arrangement");
     });
   });
 
@@ -210,6 +216,10 @@ export function activate(activation: ActivationContext) {
           pronunciationDictionaryLocators: activeDict
             ? [{ pronunciationDictionaryId: activeDict.id, versionId: activeDict.versionId }]
             : undefined,
+          speed: modal.speed,
+          stability: modal.stability,
+          similarityBoost: modal.similarityBoost,
+          style: modal.style,
         });
         if (signal.aborted) return;
 
@@ -314,9 +324,10 @@ export function activate(activation: ActivationContext) {
 
   register(context, COMMANDS.drumRackSfx, (arg) => {
     runSafe(async () => {
-      const modal = await promptDrumRackSfx(context);
+      const drumRack = resolveHandle(context, arg as Handle, DrumRack);
+      const modal = await promptDrumRackSfx(context, drumRack);
       if (!modal) return;
-      await pipelineDrumRackSfx(context, resolveHandle(context, arg as Handle, DrumRack), modal);
+      await pipelineDrumRackSfx(context, drumRack, modal);
     });
   });
 

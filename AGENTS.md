@@ -125,7 +125,7 @@ Dev: `scripts/start-dev.ts` passes `--storage-directory` and `--temp-directory` 
 
 1. API wrapper in `src/elevenlabs-client.ts` — if it uploads files, use `postMultipart` not SDK streams
 2. Pipeline in `src/pipelines.ts` via `withElevenLabsProgress`
-3. Modal in `ui/*.html` + prompt in `src/ui.ts` (apply `injectBranding`)
+3. Modal in `ui/*.html` + prompt in `src/ui.ts` — colors from `src/ui-theme.ts`, layout from `ui/modal-base.css` (injected by `prepareModalHtml`)
 4. Command + context menu in `src/extension.ts`
 5. Register in `FEATURE_VERSIONS` + `CHANGELOG.md`
 6. `npm run build` and smoke in Live (Developer Mode + `npm start`)
@@ -138,6 +138,18 @@ Dev: `scripts/start-dev.ts` passes `--storage-directory` and `--temp-directory` 
 4. Do **not** rely on `client.*.convert({ file: createReadStream(...) })` for Extension Host correctness
 5. Extend `scripts/test-stem-api.ts` or add similar polyfill regression test
 6. Ensure `formatApiError` surfaces real API messages in the progress/error dialog
+
+---
+
+## UI theme
+
+| File | Role |
+|------|------|
+| [`src/ui-theme.ts`](src/ui-theme.ts) | **Edit colors here** — `ACTIVE_UI_THEME`, presets, CSS variable map |
+| [`ui/modal-base.css`](ui/modal-base.css) | Shared modal layout/components (uses `--c-*` variables only) |
+| [`src/ui-branding.ts`](src/ui-branding.ts) | Injects theme + base CSS + logo header into every modal |
+
+To retheme: change `ACTIVE_UI_THEME` in `ui-theme.ts` (or add a preset to `UI_THEME_PRESETS`). Do **not** hardcode colors in `ui/*.html`.
 
 ---
 

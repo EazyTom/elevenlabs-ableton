@@ -28,6 +28,6 @@ await esbuild.build({
   logLevel: "info",
   minify: production,
   sourcemap: !production,
-  loader: { ".html": "text", ".png": "dataurl" },
+  loader: { ".html": "text", ".png": "dataurl", ".css": "text" },
   banner: { js: nodeGlobalsBanner },
 });

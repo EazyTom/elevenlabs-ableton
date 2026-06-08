@@ -1,0 +1,180 @@
+/**
+ * Shared modal layout & components.
+ * Colors come from src/ui-theme.ts via injected :root variables — do not set colors here.
+ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+*:not(dialog) {
+  margin: 0;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+html {
+  font-family: var(--c-font-family);
+  font-size: 11.5px;
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  padding: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  color: var(--c-text-secondary);
+}
+
+textarea,
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="email"],
+input[type="password"] {
+  background: var(--c-input-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 0.4em 0.5em;
+  width: 100%;
+  outline: none;
+}
+
+textarea {
+  min-height: 4em;
+  resize: vertical;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 1px;
+}
+
+.row {
+  display: flex;
+  gap: 0.75em;
+}
+
+.row label {
+  flex: 1;
+}
+
+.hint,
+p.hint,
+p {
+  color: var(--c-text-secondary);
+  line-height: 1.4;
+}
+
+.hint,
+p.hint {
+  font-size: 0.95em;
+}
+
+.error {
+  color: var(--c-error);
+  line-height: 1.4;
+}
+
+.checkbox,
+.toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.checkbox input,
+.toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5em;
+  margin-top: auto;
+  padding-top: 0.25em;
+}
+
+button {
+  background: var(--c-button-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: 1em;
+  padding: 0.35em 1em;
+  cursor: pointer;
+}
+
+button.primary:active,
+button:active {
+  background: var(--c-accent);
+  color: var(--c-accent-on);
+  border-color: var(--c-accent-secondary);
+}
+
+fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.5em 0.65em;
+  border: 1px solid var(--c-border);
+}
+
+legend {
+  padding: 0 0.25em;
+}
+
+.toggle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em 0.75em;
+}
+
+.tempo-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  color: var(--c-text);
+}
+
+.tempo-row input[type="range"] {
+  flex: 1;
+  min-width: 8em;
+}
+
+.tempo-row input[type="range"]:disabled {
+  opacity: 0.4;
+}
+
+pre {
+  flex: 1;
+  overflow: auto;
+  background: var(--c-input-bg);
+  border: 1px solid var(--c-border);
+  padding: 0.75em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: 1em;
+  font-weight: normal;
+  color: var(--c-text-secondary);
+}

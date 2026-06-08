@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ElevenLabs SFX</title>
+  {{SFX_PROMPT_RANDOMIZER}}
   <script>
     function doSendMessage(message) {
       if (window.webkit?.messageHandlers?.live) {
@@ -17,110 +18,123 @@
       doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
     }
 
+    function durationFromSlider() {
+      return parseInt(document.getElementById("duration").value, 10) / 2;
+    }
+
+    function updateDurationLabel() {
+      document.getElementById("durationValue").textContent = `${durationFromSlider().toFixed(1)} sec`;
+    }
+
+    function updateVariantsLabel() {
+      document.getElementById("variantsValue").textContent = document.getElementById("variants").value;
+    }
+
+    function syncLoopModelUi() {
+      const loop = document.getElementById("loop").checked;
+      const model = document.getElementById("modelId");
+      if (loop && model.value !== "eleven_text_to_sound_v2") {
+        model.value = "eleven_text_to_sound_v2";
+      }
+    }
+
     function submit() {
       const text = document.getElementById("text").value.trim();
-      const duration = parseFloat(document.getElementById("duration").value);
       const influence = parseFloat(document.getElementById("influence").value);
+      const variants = parseInt(document.getElementById("variants").value, 10);
       if (!text) return;
       closeWithResult({
         cancelled: false,
         text,
-        durationSeconds: Number.isFinite(duration) ? duration : undefined,
+        durationSeconds: durationFromSlider(),
         promptInfluence: Number.isFinite(influence) ? influence : undefined,
+        loop: document.getElementById("loop").checked,
+        modelId: document.getElementById("modelId").value,
+        variants: Number.isFinite(variants) ? variants : 1,
       });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("text").focus();
+      document.getElementById("duration").addEventListener("input", updateDurationLabel);
+      document.getElementById("variants").addEventListener("input", updateVariantsLabel);
+      document.getElementById("loop").addEventListener("change", syncLoopModelUi);
+      updateDurationLabel();
+      updateVariantsLabel();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
       });
     });
   </script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    *:not(dialog) { margin: 0; }
-    input, button, textarea { font: inherit; }
-
-    :root {
-      --c-bg: hsl(0, 0%, 21%);
-      --c-input-bg: hsl(0, 0%, 12%);
-      --c-text: hsl(0, 0%, 71%);
-      --c-text-secondary: hsl(0, 0%, 41%);
-      --c-border: hsl(0, 0%, 7%);
-      --c-button-bg: hsl(0, 0%, 16%);
-      --c-accent: hsl(31, 100%, 67%);
+    textarea { min-height: 4em; }
+    body { gap: 0.65em; overflow-y: auto; }
+    .prompt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5em;
     }
-
-    html {
-      background: var(--c-bg);
-      color: var(--c-text);
-      font-family: "AbletonSansSmall", sans-serif;
-      font-size: 11.5px;
-      height: 100%;
+    .prompt-header label { flex: 1; margin: 0; }
+    .loop-hint { font-size: 0.95em; }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
     }
-
-    body {
-      height: 100%;
-      padding: 1.25em;
+    .slider-row input[type="range"] { flex: 1; }
+    .slider-value { min-width: 4.5em; color: var(--c-accent-secondary); }
+    .stack-column {
       display: flex;
       flex-direction: column;
-      gap: 0.75em;
+      gap: 0.5em;
     }
-
-    label {
+    .stack-column label {
       display: flex;
       flex-direction: column;
       gap: 0.25em;
-      color: var(--c-text-secondary);
     }
-
-    textarea, input {
-      background: var(--c-input-bg);
-      color: var(--c-text);
-      border: 1px solid var(--c-border);
-      padding: 0.4em 0.5em;
-      width: 100%;
-      outline: none;
-    }
-
-    textarea { min-height: 4em; resize: vertical; }
-    textarea:focus, input:focus { outline: 2px solid var(--c-text-secondary); }
-
-    .row { display: flex; gap: 0.75em; }
-    .row label { flex: 1; }
-
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5em;
-      margin-top: auto;
-    }
-
-    button {
-      background: var(--c-button-bg);
-      color: var(--c-text);
-      border: 1px solid var(--c-border);
-      border-radius: 1em;
-      padding: 0.35em 1em;
-      cursor: pointer;
-    }
-
-    button.primary:active { background: var(--c-accent); color: #111; }
   </style>
 </head>
 <body>
-  <label for="text">Sound effect prompt</label>
+  <div class="prompt-header">
+    <label for="text">Sound effect prompt</label>
+    <button type="button" onclick="randomizePrompt()">Randomize</button>
+  </div>
   <textarea id="text" placeholder="e.g. cinematic whoosh, 808 kick, dog bark…"></textarea>
 
+  <label class="slider-row">
+    <span>Duration</span>
+    <input id="duration" type="range" min="1" max="44" step="1" value="6" />
+    <span id="durationValue" class="slider-value">3.0 sec</span>
+  </label>
+
+  <label class="slider-row">
+    <span>Variants</span>
+    <input id="variants" type="range" min="1" max="10" step="1" value="1" />
+    <span id="variantsValue" class="slider-value">1</span>
+  </label>
+
   <div class="row">
-    <label for="duration">Duration (sec, optional)
-      <input id="duration" type="number" min="0.5" max="22" step="0.5" placeholder="3" />
-    </label>
     <label for="influence">Prompt influence (0–1)
       <input id="influence" type="number" min="0" max="1" step="0.1" placeholder="0.3" />
     </label>
   </div>
+
+  <div class="stack-column">
+    <label for="modelId">Model
+      <select id="modelId">
+        <option value="eleven_text_to_sound_v1">SFX v1</option>
+        <option value="eleven_text_to_sound_v2" selected>SFX v2</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="checkbox">
+    <input id="loop" type="checkbox" />
+    Seamless Loop
+  </label>
+  <p class="hint loop-hint">For loops, try 2–8 seconds duration.</p>
 
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>

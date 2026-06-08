@@ -1,4 +1,5 @@
 import type { initialize } from "@ableton-extensions/sdk";
+import { DrumRack } from "@ableton-extensions/sdk";
 
 import alignLyricsModalHtml from "../ui/align-lyrics-modal.html";
 import cloneVoiceModalHtml from "../ui/clone-voice-modal.html";
@@ -8,6 +9,7 @@ import musicModalHtml from "../ui/music-modal.html";
 import pronunciationModalHtml from "../ui/pronunciation-modal.html";
 import resultModalHtml from "../ui/result-modal.html";
 import sfxModalHtml from "../ui/sfx-modal.html";
+import sfxVariantPickerModalHtml from "../ui/sfx-variant-picker-modal.html";
 import stemSeparationModalHtml from "../ui/stem-separation-modal.html";
 import transcriptModalHtml from "../ui/transcript-modal.html";
 import ttsModalHtml from "../ui/tts-modal.html";
@@ -18,6 +20,12 @@ import {
   resolveApiKey,
   type VoiceSummary,
 } from "./elevenlabs-client.js";
+import { listPadsWithSimpler, type DrumPadSummary } from "./drum-io.js";
+import { DRUM_RACK_START_NOTE } from "./drum-kit.js";
+import { buildMusicPromptRandomizerScript } from "./music-prompt.js";
+import { clampMusicVariants } from "./music-variants.js";
+import { buildSfxPromptRandomizerScript } from "./sfx-prompt.js";
+import { clampSfxVariants } from "./sfx-variants.js";
 import { MODAL_HEADER_EXTRA_HEIGHT, prepareModalHtml } from "./ui-branding.js";
 import { getCachedVoices, setCachedVoices } from "./voice-cache.js";
 import type {
@@ -28,6 +36,7 @@ import type {
   MusicModalResult,
   PronunciationModalResult,
   SfxModalResult,
+  SfxVariantPickerResult,
   StemSeparationModalResult,
   TextVoiceModalResult,
   VoiceOnlyModalResult,
@@ -40,7 +49,16 @@ function modalUrl(html: string): string {
 }
 
 function parseJson<T>(raw: string): T {
-  return JSON.parse(raw) as T;
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return { cancelled: true } as T;
+  }
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    console.warn("[elevenlabs-ableton] Modal returned invalid JSON; treating as cancelled.");
+    return { cancelled: true } as T;
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -49,6 +67,16 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function buildPadOptionsHtml(pads: DrumPadSummary[]): string {
+  if (pads.length === 0) {
+    return '<option value="">No Simpler pads — add a Simpler to a pad first</option>';
+  }
+  const opts = pads
+    .map((p) => `<option value="${p.midiNote}">MIDI note ${p.midiNote}</option>`)
+    .join("");
+  return `<option value="">Select pad…</option>${opts}`;
 }
 
 function buildVoiceOptionsHtml(voices: VoiceSummary[]): string {
@@ -83,6 +111,72 @@ function injectVoiceOptions(template: string, voices: VoiceSummary[]): string {
   return template.replace(/\{\{VOICE_OPTIONS\}\}/g, options);
 }
 
+function prepareSfxModalHtml(template: string): string {
+  return template.replace(/\{\{SFX_PROMPT_RANDOMIZER\}\}/g, buildSfxPromptRandomizerScript());
+}
+
+function prepareMusicModalHtml(template: string): string {
+  return template.replace(/\{\{MUSIC_PROMPT_RANDOMIZER\}\}/g, buildMusicPromptRandomizerScript());
+}
+
+function normalizeMusicModalResult(parsed: MusicModalResult): MusicModalResult {
+  return {
+    ...parsed,
+    variants: clampMusicVariants(parsed.variants),
+    modelId: parsed.modelId === "music_v1" ? "music_v1" : "music_v2",
+  };
+}
+
+function normalizeSfxModalResult(parsed: SfxModalResult): SfxModalResult {
+  return {
+    ...parsed,
+    variants: clampSfxVariants(parsed.variants),
+    modelId: parsed.modelId === "eleven_text_to_sound_v1" ? "eleven_text_to_sound_v1" : "eleven_text_to_sound_v2",
+  };
+}
+
+function normalizeDrumRackSfxModalResult(parsed: DrumRackSfxModalResult): DrumRackSfxModalResult {
+  return {
+    ...normalizeSfxModalResult(parsed),
+    startMidiNote: parsed.startMidiNote ?? DRUM_RACK_START_NOTE,
+  };
+}
+
+function buildSfxVariantOptionsHtml(variants: Uint8Array[]): string {
+  return variants
+    .map((bytes, i) => {
+      const kb = (bytes.byteLength / 1024).toFixed(1);
+      const checked = i === 0 ? " checked" : "";
+      return `<label class="checkbox"><input type="radio" name="variant" value="${i}"${checked} /> Variant ${i + 1} (${kb} KB)</label>`;
+    })
+    .join("\n");
+}
+
+/** After multi-variant generation, let the user pick which bytes to import. */
+export async function promptSfxVariantPick(
+  context: ExtensionContext,
+  variants: Uint8Array[],
+): Promise<Uint8Array | null> {
+  if (variants.length === 0) return null;
+  if (variants.length === 1) return variants[0]!;
+
+  const html = sfxVariantPickerModalHtml.replace(
+    /\{\{VARIANT_OPTIONS\}\}/g,
+    buildSfxVariantOptionsHtml(variants),
+  );
+  const parsed = await showModal<SfxVariantPickerResult>(
+    context,
+    html,
+    380,
+    140 + variants.length * 26,
+    "Pick variant",
+  );
+  if (parsed.cancelled || parsed.variantIndex === undefined) return null;
+  const idx = parsed.variantIndex;
+  if (!Number.isFinite(idx) || idx < 0 || idx >= variants.length) return null;
+  return variants[idx]!;
+}
+
 async function showModal<T>(
   context: ExtensionContext,
   html: string,
@@ -104,7 +198,7 @@ export async function promptTts(context: ExtensionContext): Promise<TextVoiceMod
     context,
     injectVoiceOptions(ttsModalHtml, voices),
     420,
-    360,
+    520,
     "Text to speech",
   );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
@@ -112,15 +206,27 @@ export async function promptTts(context: ExtensionContext): Promise<TextVoiceMod
 }
 
 export async function promptSfx(context: ExtensionContext): Promise<SfxModalResult | null> {
-  const parsed = await showModal<SfxModalResult>(context, sfxModalHtml, 420, 320, "Sound effects");
+  const parsed = await showModal<SfxModalResult>(
+    context,
+    prepareSfxModalHtml(sfxModalHtml),
+    420,
+    500,
+    "Sound effects",
+  );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
-  return parsed;
+  return normalizeSfxModalResult(parsed);
 }
 
 export async function promptMusic(context: ExtensionContext): Promise<MusicModalResult | null> {
-  const parsed = await showModal<MusicModalResult>(context, musicModalHtml, 440, 340, "Music generation");
-  if (parsed.cancelled || !parsed.prompt?.trim()) return null;
-  return parsed;
+  const parsed = await showModal<MusicModalResult>(
+    context,
+    prepareMusicModalHtml(musicModalHtml),
+    460,
+    680,
+    "Music generation",
+  );
+  if (parsed.cancelled || (!parsed.prompt?.trim() && !(parsed.genres?.length))) return null;
+  return normalizeMusicModalResult(parsed);
 }
 
 export async function promptVoice(context: ExtensionContext): Promise<VoiceOnlyModalResult | null> {
@@ -149,16 +255,58 @@ export async function promptDialogue(context: ExtensionContext): Promise<Dialogu
 
 export async function promptDrumRackSfx(
   context: ExtensionContext,
+  drumRack: DrumRack<"1.0.0">,
 ): Promise<DrumRackSfxModalResult | null> {
+  const pads = listPadsWithSimpler(drumRack);
+  const html = prepareSfxModalHtml(
+    drumRackSfxModalHtml.replace(/\{\{PAD_OPTIONS\}\}/g, buildPadOptionsHtml(pads)),
+  );
   const parsed = await showModal<DrumRackSfxModalResult>(
     context,
-    drumRackSfxModalHtml,
-    420,
-    360,
+    html,
+    440,
+    620,
     "Drum rack SFX",
   );
-  if (parsed.cancelled || !parsed.text?.trim() || parsed.midiNote === undefined) return null;
-  return parsed;
+  if (parsed.cancelled) return null;
+
+  const variants = clampSfxVariants(parsed.variants);
+  const startMidiNote = parsed.startMidiNote ?? DRUM_RACK_START_NOTE;
+
+  if (parsed.buildDrumKit) {
+    return normalizeDrumRackSfxModalResult({
+      ...parsed,
+      variants: 1,
+      autoLoadPads: false,
+      buildDrumKit: true,
+      startMidiNote,
+    });
+  }
+
+  if (parsed.autoLoadPads) {
+    if (!parsed.text?.trim()) return null;
+    return normalizeDrumRackSfxModalResult({
+      ...parsed,
+      variants,
+      autoLoadPads: true,
+      buildDrumKit: false,
+      startMidiNote,
+    });
+  }
+
+  if (!parsed.text?.trim()) return null;
+  const midiNote = parsed.midiNote;
+  if (midiNote === undefined || !Number.isFinite(midiNote) || midiNote < 0 || midiNote > 127) {
+    return null;
+  }
+  return normalizeDrumRackSfxModalResult({
+    ...parsed,
+    variants,
+    midiNote,
+    autoLoadPads: false,
+    buildDrumKit: false,
+    startMidiNote,
+  });
 }
 
 export async function promptCloneVoice(context: ExtensionContext): Promise<CloneVoiceModalResult | null> {

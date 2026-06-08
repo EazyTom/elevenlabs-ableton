@@ -14,6 +14,11 @@ import { fileURLToPath } from "url";
 import { strToU8, zipSync } from "fflate";
 
 import { parseDialogueScript } from "../src/dialogue.js";
+import { buildMusicPrompt, MUSIC_LOOP_SUFFIX, MUSIC_PROMPT_BANKS, MUSIC_TEMPLATE_STRINGS, randomMusicPrompt } from "../src/music-prompt.js";
+import { clampMusicVariants, MAX_MUSIC_VARIANTS } from "../src/music-variants.js";
+import { buildDrumKitPiecePrompt, DRUM_KIT_PIECES } from "../src/drum-kit.js";
+import { randomSfxPrompt, SFX_LOOP_SUFFIX, SFX_PROMPT_BANKS } from "../src/sfx-prompt.js";
+import { clampSfxVariants, MAX_SFX_VARIANTS } from "../src/sfx-variants.js";
 import {
   createClient,
   generateSfx,
@@ -95,6 +100,11 @@ async function checkBundle(): Promise<void> {
     fail("bundle-version", `bundle does not reference ${EXTENSION_VERSION}`);
   }
   pass("bundle-version", `${EXTENSION_VERSION} embedded`);
+
+  if (!bundle!.includes("--c-accent-secondary")) {
+    fail("bundle-theme", "UI theme CSS variables not embedded");
+  }
+  pass("bundle-theme", "theme variables present");
 }
 
 function checkPureFunctions(): void {
@@ -125,6 +135,80 @@ function checkPureFunctions(): void {
     fail("extractZipArchive", "ZIP round-trip failed");
   }
   pass("extractZipArchive", "1 entry extracted");
+
+  const built = buildMusicPrompt({
+    genres: ["trap", "epic"],
+    tempoBpm: 140,
+    highEnergy: true,
+    prompt: "808 bass",
+  });
+  if (!built.includes("trap") || !built.includes("140 BPM") || !built.includes("808 bass")) {
+    fail("buildMusicPrompt", `unexpected prompt: ${built}`);
+  }
+  pass("buildMusicPrompt", "genres + tempo merged");
+
+  const musicPrompt = randomMusicPrompt({}, () => 0);
+  if (!musicPrompt || musicPrompt.length < 20) {
+    fail("randomMusicPrompt", "prompt too short");
+  }
+  if (!MUSIC_PROMPT_BANKS.genres.some((phrase) => musicPrompt.includes(phrase))) {
+    fail("randomMusicPrompt", "prompt missing genre bank vocabulary");
+  }
+  if (!MUSIC_PROMPT_BANKS.textures.some((word) => musicPrompt.includes(word))) {
+    fail("randomMusicPrompt", "prompt missing texture vocabulary");
+  }
+  if (MUSIC_TEMPLATE_STRINGS.length < 10) {
+    fail("randomMusicPrompt", "expected at least 10 prompt templates");
+  }
+  pass("randomMusicPrompt", "descriptive phrase generated");
+
+  const musicLoopPrompt = randomMusicPrompt({ loop: true }, () => 0);
+  if (!musicLoopPrompt.includes(MUSIC_LOOP_SUFFIX)) {
+    fail("randomMusicPrompt-loop", "loop suffix missing");
+  }
+  pass("randomMusicPrompt-loop", "loop suffix appended");
+
+  if (clampMusicVariants(undefined) !== 1 || clampMusicVariants(0) !== 1) {
+    fail("clampMusicVariants", "default should be 1");
+  }
+  if (clampMusicVariants(10) !== 10 || clampMusicVariants(99) !== MAX_MUSIC_VARIANTS) {
+    fail("clampMusicVariants", "max should be 10");
+  }
+  pass("clampMusicVariants", "clamped to 1–10");
+
+  const sfxPrompt = randomSfxPrompt({}, () => 0);
+  if (!sfxPrompt || sfxPrompt.length < 20) {
+    fail("randomSfxPrompt", "prompt too short");
+  }
+  if (!SFX_PROMPT_BANKS.textures.some((word) => sfxPrompt.includes(word))) {
+    fail("randomSfxPrompt", "prompt missing bank vocabulary");
+  }
+  pass("randomSfxPrompt", "descriptive phrase generated");
+
+  const loopPrompt = randomSfxPrompt({ loop: true }, () => 0);
+  if (!loopPrompt.includes(SFX_LOOP_SUFFIX)) {
+    fail("randomSfxPrompt-loop", "loop suffix missing");
+  }
+  pass("randomSfxPrompt-loop", "loop suffix appended");
+
+  if (clampSfxVariants(undefined) !== 1 || clampSfxVariants(0) !== 1) {
+    fail("clampSfxVariants", "default should be 1");
+  }
+  if (clampSfxVariants(10) !== 10 || clampSfxVariants(99) !== MAX_SFX_VARIANTS) {
+    fail("clampSfxVariants", "max should be 10");
+  }
+  pass("clampSfxVariants", "clamped to 1–10");
+
+  const kickPrompt = buildDrumKitPiecePrompt("lo-fi trap", DRUM_KIT_PIECES[0]!);
+  if (!kickPrompt.includes("lo-fi trap") || !kickPrompt.includes("kick")) {
+    fail("buildDrumKitPiecePrompt", `unexpected kit prompt: ${kickPrompt}`);
+  }
+  pass("buildDrumKitPiecePrompt", "base + kick suffix merged");
+
+  if (DRUM_KIT_PIECES.length !== 7) {
+    fail("DRUM_KIT_PIECES", "expected 7 kit pieces");
+  }
+  pass("DRUM_KIT_PIECES", "7 kit pieces defined");
 }
 
 async function checkApiSmoke(): Promise<void> {
