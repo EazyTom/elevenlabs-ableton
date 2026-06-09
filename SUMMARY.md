@@ -1,4 +1,4 @@
-# README — Table of Contents
+# Table of Contents
 
 Quick navigation for **[README.md](README.md)** (`elevenlabs-ableton` v0.5.0).  
 All section links use GitHub-flavored markdown anchors into the README.
