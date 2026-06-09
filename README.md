@@ -9,7 +9,7 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.5.0](CHANGELOG.md#v050)** · [Changelog](CHANGELOG.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.5.0](CHANGELOG.md#v050)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
 
 | | |
 |---|---|
@@ -505,6 +505,7 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 | Document | Audience |
 |----------|----------|
 | [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.5.0) |
+| [SUMMARY.md](SUMMARY.md) | Table of contents for this README |
 | [LICENSE](LICENSE) | GPL-3.0-or-later terms |
 | [docs/roadmap.md](docs/roadmap.md) | Planned features |
 | [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | Latest feature spec |
