@@ -26,14 +26,14 @@
   </script>
 </head>
 <body>
-  <p>Create a pronunciation dictionary rule. When active, it applies to subsequent TTS generations.</p>
+  <p>Create a pronunciation dictionary rule. When active, it applies to subsequent text-to-speech generations.</p>
   <label for="dictName">Dictionary name</label>
   <input id="dictName" type="text" placeholder="Live Set Pronunciation" />
   <label for="word">Word to replace</label>
   <input id="word" type="text" placeholder="Ableton" />
   <label for="alias">Pronunciation (alias)</label>
   <input id="alias" type="text" placeholder="ay-bull-tawn" />
-  <label class="checkbox"><input id="setActive" type="checkbox" checked /> Set as active dictionary for TTS</label>
+  <label class="checkbox"><input id="setActive" type="checkbox" checked /> Set as active dictionary for text-to-speech</label>
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
     <button type="button" class="primary" onclick="submit()">Save</button>

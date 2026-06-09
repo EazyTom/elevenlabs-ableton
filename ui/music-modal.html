@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ElevenLabs Music</title>
+  <title>Generate Music</title>
   {{MUSIC_PROMPT_RANDOMIZER}}
   <script>
     function doSendMessage(message) {
@@ -35,7 +35,17 @@
       label.textContent = `${slider.value} BPM`;
     }
 
+    function syncTempoUi() {
+      const enabled = document.getElementById("useTempo").checked;
+      document.getElementById("tempo").disabled = !enabled;
+      updateTempoLabel();
+    }
+
     function updateDurationLabel() {
+      if (document.getElementById("autoDuration").checked) {
+        document.getElementById("lengthValue").textContent = "Auto";
+        return;
+      }
       document.getElementById("lengthValue").textContent = `${document.getElementById("length").value} sec`;
     }
 
@@ -43,9 +53,24 @@
       document.getElementById("variantsValue").textContent = document.getElementById("variants").value;
     }
 
+    function influenceFromSlider() {
+      return parseInt(document.getElementById("influence").value, 10) / 10;
+    }
+
+    function updateInfluenceLabel() {
+      document.getElementById("influenceValue").textContent = influenceFromSlider().toFixed(1);
+    }
+
+    function syncAutoDurationUi() {
+      const auto = document.getElementById("autoDuration").checked;
+      document.getElementById("length").disabled = auto;
+      updateDurationLabel();
+    }
+
     function submit() {
       setError("");
       const prompt = document.getElementById("prompt").value.trim();
+      const autoDuration = document.getElementById("autoDuration").checked;
       const lengthSec = parseInt(document.getElementById("length").value, 10);
       const variants = parseInt(document.getElementById("variants").value, 10);
       const genres = checkedGenres();
@@ -61,14 +86,14 @@
       closeWithResult({
         cancelled: false,
         prompt: prompt || undefined,
-        musicLengthMs: Number.isFinite(lengthSec) ? lengthSec * 1000 : undefined,
-        forceInstrumental: document.getElementById("instrumental").checked,
+        autoDuration,
+        musicLengthMs: autoDuration || !Number.isFinite(lengthSec) ? undefined : lengthSec * 1000,
         genres,
         tempoBpm: useTempo && Number.isFinite(tempoBpm) ? tempoBpm : undefined,
-        highEnergy: document.getElementById("highEnergy").checked,
-        darkMood: document.getElementById("darkMood").checked,
-        loFi: document.getElementById("loFi").checked,
         loop: document.getElementById("loop").checked,
+        promptInfluence: influenceFromSlider(),
+        negativePrompt: document.getElementById("negativePrompt").value.trim() || undefined,
+        outputFormat: document.getElementById("outputFormat").value,
         modelId: document.getElementById("modelId").value,
         variants: Number.isFinite(variants) ? variants : 1,
       });
@@ -76,15 +101,17 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("prompt").focus();
+      document.getElementById("autoDuration").addEventListener("change", syncAutoDurationUi);
       document.getElementById("tempo").addEventListener("input", updateTempoLabel);
       document.getElementById("length").addEventListener("input", updateDurationLabel);
       document.getElementById("variants").addEventListener("input", updateVariantsLabel);
-      document.getElementById("useTempo").addEventListener("change", (e) => {
-        document.getElementById("tempo").disabled = !e.target.checked;
-      });
-      updateTempoLabel();
+      document.getElementById("influence").addEventListener("input", updateInfluenceLabel);
+      document.getElementById("useTempo").addEventListener("change", syncTempoUi);
+      syncAutoDurationUi();
+      syncTempoUi();
       updateDurationLabel();
       updateVariantsLabel();
+      updateInfluenceLabel();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
       });
@@ -93,7 +120,17 @@
   <style>
     body { gap: 0.65em; overflow-y: auto; }
     textarea { min-height: 3.5em; }
+    #negativePrompt { min-height: 2.5em; }
     #tempoValue, .slider-value { min-width: 4.5em; color: var(--c-accent-secondary); }
+    .control-label {
+      min-width: 6.5em;
+      flex-shrink: 0;
+    }
+    .tempo-row .control-label { min-width: 4.5em; }
+    .row-gutter {
+      width: 1.15em;
+      flex-shrink: 0;
+    }
     .prompt-header {
       display: flex;
       align-items: center;
@@ -101,25 +138,16 @@
       gap: 0.5em;
     }
     .prompt-header label { flex: 1; margin: 0; }
-    .loop-hint { font-size: 0.95em; }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-    }
-    .slider-row input[type="range"] { flex: 1; }
-    .stack-column {
+    .loop-hint, .quality-hint, .negative-hint, .model-hint { font-size: 0.95em; }
+    .hints-section {
       display: flex;
       flex-direction: column;
-      gap: 0.5em;
+      gap: 0.35em;
+      margin-top: 0.15em;
     }
-    .stack-column label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25em;
-    }
+    .hints-section .hint { margin: 0; }
     fieldset.genres {
-      max-height: 11em;
+      max-height: 13em;
       overflow-y: auto;
     }
   </style>
@@ -128,10 +156,23 @@
   <p class="hint">Music generation requires an ElevenLabs paid plan.</p>
   <p id="error" class="error" hidden></p>
 
-  <label class="slider-row">
-    <span>Duration</span>
-    <input id="length" type="range" min="3" max="300" step="1" value="30" />
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Duration</span>
+    <input id="length" type="range" min="3" max="600" step="1" value="30" />
     <span id="lengthValue" class="slider-value">30 sec</span>
+  </label>
+
+  <label class="checkbox">
+    <input id="autoDuration" type="checkbox" />
+    Auto duration (API picks length from prompt)
+  </label>
+
+  <label class="tempo-row">
+    <input id="useTempo" type="checkbox" checked />
+    <span class="control-label">Set tempo</span>
+    <input id="tempo" type="range" min="40" max="200" step="1" value="{{LIVE_TEMPO}}" />
+    <span id="tempoValue">{{LIVE_TEMPO}} BPM</span>
   </label>
 
   <div class="prompt-header">
@@ -140,18 +181,22 @@
   </div>
   <textarea id="prompt" placeholder="Mood, instruments, structure…"></textarea>
 
-  <label class="tempo-row">
-    <input id="useTempo" type="checkbox" />
-    <span>Tempo</span>
-    <input id="tempo" type="range" min="60" max="180" step="1" value="120" disabled />
-    <span id="tempoValue">120 BPM</span>
-  </label>
+  <label for="negativePrompt">Negative prompt (optional)</label>
+  <textarea id="negativePrompt" placeholder="Styles to avoid — vocals, distortion, EDM drops…"></textarea>
+  <p class="hint negative-hint">Comma-separated styles to exclude (e.g. vocals, distortion). Uses ElevenLabs negative_global_styles via a composition plan.</p>
 
   <fieldset class="genres">
     <legend>Genres</legend>
     <div class="toggle-grid">
       <label class="toggle"><input type="checkbox" name="genres" value="trap" /> Trap</label>
       <label class="toggle"><input type="checkbox" name="genres" value="house" /> House</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="ukGarage" /> UK Garage</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="grime" /> Grime</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="electro" /> Electro</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="nuDisco" /> Nu-Disco</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="trance" /> Trance</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="psytrance" /> Psytrance</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="neuro" /> Neuro</label>
       <label class="toggle"><input type="checkbox" name="genres" value="techno" /> Techno</label>
       <label class="toggle"><input type="checkbox" name="genres" value="dnb" /> Drum &amp; Bass</label>
       <label class="toggle"><input type="checkbox" name="genres" value="dubstep" /> Dubstep</label>
@@ -163,10 +208,12 @@
       <label class="toggle"><input type="checkbox" name="genres" value="sciFi" /> Sci-Fi</label>
       <label class="toggle"><input type="checkbox" name="genres" value="bollywood" /> Bollywood</label>
       <label class="toggle"><input type="checkbox" name="genres" value="ambientMusic" /> Ambient</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="meditation" /> Meditation</label>
       <label class="toggle"><input type="checkbox" name="genres" value="jungle" /> Jungle</label>
-      <label class="toggle"><input type="checkbox" name="genres" value="rock90s" /> 90s Rock</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="grunge" /> Grunge</label>
       <label class="toggle"><input type="checkbox" name="genres" value="disco" /> Disco</label>
       <label class="toggle"><input type="checkbox" name="genres" value="folk" /> Folk</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="celtic" /> Celtic</label>
       <label class="toggle"><input type="checkbox" name="genres" value="retro80s" /> 80s Retro</label>
       <label class="toggle"><input type="checkbox" name="genres" value="indie90s" /> 90s Indie</label>
       <label class="toggle"><input type="checkbox" name="genres" value="country" /> Country</label>
@@ -174,36 +221,68 @@
       <label class="toggle"><input type="checkbox" name="genres" value="jazz" /> Jazz</label>
       <label class="toggle"><input type="checkbox" name="genres" value="classical" /> Classical</label>
       <label class="toggle"><input type="checkbox" name="genres" value="acoustic" /> Acoustic</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="dark" /> Dark</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="loFi" /> Lo-fi</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="instrumental" /> Instrumental</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="synthwave" /> Synthwave</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="reggae" /> Reggae</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="soul" /> Soul</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="rnb" /> R&amp;B</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="metal" /> Metal</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="latin" /> Latin</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="kpop" /> K-pop</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="blues" /> Blues</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="afrobeats" /> Afrobeats</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="industrial" /> Industrial</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="gospel" /> Gospel</label>
+      <label class="toggle"><input type="checkbox" name="genres" value="punk" /> Punk</label>
     </div>
   </fieldset>
 
-  <div class="toggle-grid">
-    <label class="toggle"><input id="instrumental" type="checkbox" /> Instrumental</label>
-    <label class="toggle"><input id="highEnergy" type="checkbox" /> High energy</label>
-    <label class="toggle"><input id="darkMood" type="checkbox" /> Dark / moody</label>
-    <label class="toggle"><input id="loFi" type="checkbox" /> Lo-fi</label>
-  </div>
-
-  <label class="slider-row">
-    <span>Variants</span>
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Variants</span>
     <input id="variants" type="range" min="1" max="10" step="1" value="1" />
     <span id="variantsValue" class="slider-value">1</span>
   </label>
 
-  <div class="stack-column">
-    <label for="modelId">Model
-      <select id="modelId">
-        <option value="music_v1">Music v1</option>
-        <option value="music_v2" selected>Music v2</option>
-      </select>
-    </label>
-  </div>
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Influence</span>
+    <input id="influence" type="range" min="0" max="10" step="1" value="3" />
+    <span id="influenceValue" class="slider-value">0.3</span>
+  </label>
 
   <label class="checkbox">
     <input id="loop" type="checkbox" />
     Seamless Loop
   </label>
-  <p class="hint loop-hint">For loops, try 8–30 seconds. Variants load into the selected slot and the slots below it.</p>
+
+  <label class="select-row" for="modelId">
+    <span class="control-label">Model</span>
+    <select id="modelId">
+      <option value="music_v1" selected>Music v1</option>
+      <option value="music_v2">Music v2</option>
+    </select>
+  </label>
+
+  <label class="select-row" for="outputFormat">
+    <span class="control-label">Quality</span>
+    <select id="outputFormat">
+      <option value="mp3_44100_128" selected>MP3 128 kbps (default)</option>
+      <option value="mp3_44100_64">MP3 64 kbps</option>
+      <option value="mp3_44100_96">MP3 96 kbps</option>
+      <option value="mp3_44100_192">MP3 192 kbps</option>
+      <option value="pcm_44100">PCM 44.1 kHz</option>
+      <option value="opus_48000_128">Opus 128 kbps</option>
+    </select>
+  </label>
+
+  <div class="hints-section">
+    <p class="hint model-hint">Music v1 is the default API model. Music v2 needs a paid plan and may require ElevenLabs API early access — contact sales if v2 requests fail.</p>
+    <p class="hint loop-hint">For loops, try 8–30 seconds. Variants load into the selected slot and the slots below it.</p>
+    <p class="hint quality-hint">MP3 192 kbps and PCM formats require a higher ElevenLabs plan (Creator or Pro).</p>
+  </div>
 
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>

@@ -1,6 +1,8 @@
 import type { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
+import { parseAudioOutputFormat } from "./audio-output-formats.js";
 import { generateMusic, type MusicRequest } from "./elevenlabs-client.js";
+import { musicForceInstrumental } from "./music-prompt.js";
 import type { MusicModalResult } from "./types.js";
 
 export const MAX_MUSIC_VARIANTS = 10;
@@ -15,9 +17,13 @@ export function musicRequestFromModal(modal: MusicModalResult, prompt: string): 
   return {
     prompt,
     musicLengthMs: modal.musicLengthMs,
-    forceInstrumental: modal.forceInstrumental,
+    autoDuration: modal.autoDuration,
+    forceInstrumental: musicForceInstrumental(modal),
     modelId: modal.modelId,
     loop: modal.loop,
+    promptInfluence: modal.promptInfluence,
+    negativePrompt: modal.negativePrompt,
+    outputFormat: parseAudioOutputFormat(modal.outputFormat),
   };
 }
 

@@ -6,6 +6,30 @@ Extension release version is defined in `src/version.ts` (`EXTENSION_VERSION`) a
 
 Feature-level versions are tracked in `FEATURE_VERSIONS` inside `src/version.ts` for incremental capability tracking.
 
+<a id="v050"></a>
+
+## [0.5.0] — 2026-06-07
+
+### Added
+
+- **Session View voice isolation** — **Isolate Voice** on `ClipSlot` (audio tracks) and `AudioClip`; replaces the clip in the same slot and preserves loop settings
+- **Screenshots** — `docs/*.png` for README and release notes
+
+### Changed — modal functionality & UI
+
+- **Generate Sound Effects** / **Generate Music** modal titles and unified **Generate Text-to-Speech** menu labels
+- **Music modal** — **Set tempo** on by default (slider starts at Live’s current tempo); when enabled, writes tempo to the Live Set on generate; **30 s** manual duration default with **Auto duration** off by default; genre grid cleanup; hints grouped; Seamless Loop above Model/Quality
+- **SFX modal** — **Auto duration** on by default with toggle **above** the duration slider
+- **Model / Quality** — inline label + dropdown on one row, half-width selects (shared `select-row` + theme override)
+- **Modal base CSS** — `label.select-row` row layout fixes label stacking above dropdowns
+
+### Changed — code optimization
+
+- **`isAudioClipSlot()`** / **`resolveAudioClipSlot()`** — Session audio generators and batch TTS skip MIDI-track clip slots (handlers guard before modals; SDK `ClipSlot` menus still appear on MIDI slots)
+- **`audioClipSlotsFromSelection()`** — filters multi-slot batch TTS to audio tracks only
+- **`normalizeSfxModalResult()`** / **`normalizeMusicModalResult()`** — consistent default flags for auto-duration
+- **`ui-branding.ts`** — half-width select override after global `width: 100%` theme rule
+
 <a id="v040"></a>
 
 ## [0.4.0] — 2026-06-06

@@ -162,6 +162,19 @@ legend {
   opacity: 0.4;
 }
 
+label.select-row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  color: var(--c-text);
+}
+
+label.select-row .control-label {
+  min-width: 4.5em;
+  flex-shrink: 0;
+}
+
 pre {
   flex: 1;
   overflow: auto;

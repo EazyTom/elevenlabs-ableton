@@ -9,11 +9,11 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.4.0](CHANGELOG.md#v040)** · [Changelog](CHANGELOG.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.5.0](CHANGELOG.md#v050)** · [Changelog](CHANGELOG.md) · [License (GPL-3.0+)](LICENSE)
 
 | | |
 |---|---|
-| **Extension version** | `0.4.0` — **19** context-menu features |
+| **Extension version** | `0.5.0` — **19** context-menu features |
 | **Ableton Extensions API** | `1.0.0` (`minimumApiVersion` in `manifest.json`) |
 | **Ableton SDK** | `@ableton-extensions/sdk` **1.0.0-beta.0** |
 | **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` **^2.51.0** |
@@ -21,6 +21,30 @@ Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech di
 | **Node.js** (dev/build only) | **≥ 24.14.1** |
 
 > Extensions are not available in retail Live builds today. You need a Live 12.4 program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
+
+### What's new in v0.5.0
+
+See [CHANGELOG.md](CHANGELOG.md#v050) and [docs/v0.5.0-features.md](docs/v0.5.0-features.md).
+
+- **Session voice isolation** — Isolate Voice on Session audio clip slots and audio clips (loop preserved)
+- **Music modal** — Set tempo sync with Live (on by default); 30 s duration default; layout and Model/Quality row polish
+- **SFX modal** — Auto duration on by default; duration toggle above slider; Model/Quality inline layout
+- **Modal UI** — Generate Sound Effects / Generate Music titles; half-width Model & Quality dropdowns; shared `select-row` styling
+- **Code optimization** — Audio-track-only clip slot guards for Session generators and batch TTS
+
+### Screenshots
+
+Context menus and generation modals in Live 12.4 (Extensions):
+
+| | |
+|---|---|
+| Extension context menus | ![Extension context menus in Live](docs/Extension-Menu.png) |
+| Generate Text-to-Speech | ![Generate Text-to-Speech modal](docs/Generate-TTS.png) |
+| Generate Sound Effects | ![Generate Sound Effects modal](docs/Generate-SFX.png) |
+| Generate Music | ![Generate Music modal](docs/Generate-Music.png) |
+| Generate Dialogue | ![Text-to-Dialogue modal](docs/Text-to-Dialogue.png) |
+
+---
 
 ### What's new in v0.4.0
 
@@ -31,7 +55,7 @@ See [CHANGELOG.md](CHANGELOG.md#v040) for full release notes.
 - **Forced alignment → MIDI** — your lyrics + audio → precise lyric marker notes
 - **Pronunciation rules** — custom word aliases, auto-applied to subsequent TTS
 - **Refactor** — shared arrangement helpers, voice cache, persisted storage, clearer API errors in modals
-- **SFX & Music modals** — duration/variant sliders, model pickers (SFX v2 / Music v2 defaults), seamless loop, prompt randomizers; music multi-variant auto-load to consecutive session clip slots
+- **SFX & Music modals** — duration/variant sliders, model pickers (SFX v2 default, Music v1 default), seamless loop, prompt randomizers; music multi-variant auto-load to consecutive session clip slots
 - **Drum rack SFX** — model/loop/slider controls, auto-load variants to pads (C0+), build full 7-piece kit from one prompt
 
 ---
@@ -46,7 +70,7 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 |----------|---------|-------|
 | **Generate** | TTS, SFX, Music, Dialogue — modals with sliders, models, loops, variants (see [below](#sfx-music--drum-rack-modals)) | Clip slot, arrangement selection |
 | **Batch** | TTS to multiple session slots | Multi-selected clip slots |
-| **Transform** | Voice changer, vocal isolation | Arrangement selection |
+| **Transform** | Voice changer, vocal isolation (arrangement + Session clips/slots) | Arrangement selection, audio clip, audio clip slot |
 | **Stems** | Separate into 2 or 6 stems → new tracks | Audio clip, arrangement selection |
 | **Transcribe** | Scribe STT (text modal) | Audio clip, arrangement selection |
 | **Lyrics → MIDI** | Scribe word timestamps → MIDI markers | Audio clip, arrangement selection |
@@ -56,6 +80,8 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 | **Voice** | Library picker in modals | TTS, voice changer, dialogue |
 | **Clone voice** | Instant voice clone from audio | Audio clip, arrangement selection |
 | **Pronunciation** | Custom word pronunciation for TTS | Audio track (any) |
+
+**v0.5.0** Session **Isolate Voice** on audio clip slots and clips replaces the clip in place and preserves loop settings.
 
 **v0.4.0** arrangement TTS also applies light post-import FX (track volume + reverb mix when available).
 
@@ -70,11 +96,14 @@ Right-click a **clip slot**, **arrangement selection**, or **Simpler** → **Gen
 | Control | Description |
 |---------|-------------|
 | **Randomize** | Fills the prompt with a random descriptive phrase (word banks + templates; loop adds a seamless-loop suffix). |
-| **Duration** | Slider **0.5–22 s** (default 3 s). |
-| **Variants** | Slider **1–10** separate API generations. When > 1, a **variant picker** opens so you choose which take to import (Simpler/arrangement). |
-| **Model** | **SFX v1** or **SFX v2** (default). Passed to the ElevenLabs text-to-sound API. |
+| **Duration** | Slider **0.5–30 s**, or **Auto duration** (on by default). Toggle sits above the slider. |
+| **Variants** | Slider **1–10**. **Session View:** each variant loads into the **selected clip slot and consecutive slots below** (no picker). **Arrangement / Simpler:** variant picker when > 1. |
+| **Prompt influence** | Slider **0–1** (default 0.3). |
+| **Negative prompt** | Optional terms to avoid; appended to the text prompt as an “Avoid: …” clause. |
+| **Auto duration** | On by default — omits length so the API guesses from the prompt (0.5–30 s). |
+| **Quality** | MP3 bitrates, PCM, or Opus. MP3 192 / PCM need Creator or Pro. |
+| **Model** | **SFX v1** or **SFX v2** (default). Inline row, half-width dropdown. |
 | **Seamless Loop** | Enables loop generation (API uses v2 when loop is on). |
-| **Prompt influence** | Optional **0–1** (default 0.3). |
 
 Imported clips respect the loop toggle (Session clip **Loop** is set in Live when enabled).
 
@@ -84,17 +113,21 @@ Right-click an **audio clip slot** or **arrangement selection** → **Generate M
 
 | Control | Description |
 |---------|-------------|
-| **Duration** | Slider **3–300 s** (default 30 s). |
+| **Duration** | **Auto duration** off by default. Manual slider **3–600 s** (default **30 s** when auto is off). |
 | **Description** | Free-text prompt; optional if at least one **genre** is selected. |
 | **Randomize** | Random rich music prompt (genres, instruments, mood, production, cinematic flavor). |
-| **Tempo** | Optional BPM slider (60–180) merged into the composed prompt. |
-| **Genres** | Single grid: electronic (Trap, House, Techno, …), cinematic styles (Epic, Horror, Sci-Fi, Bollywood, …), and styles such as Jazz, Folk, 80s Retro, Acoustic, etc. |
-| **Mood toggles** | Instrumental, High energy, Dark / moody, Lo-fi. |
 | **Variants** | Slider **1–10**. **Session View:** each variant loads into the **selected clip slot and consecutive slots below** on the same track (no picker). **Arrangement:** multi-variant still uses the variant picker. |
-| **Model** | **Music v1** or **Music v2** (default). |
+| **Genres** | Single grid: electronic (Trap, House, Techno, …), cinematic styles (Epic, Horror, Sci-Fi, Bollywood, …), and styles such as Jazz, Folk, 80s Retro, Acoustic, etc. |
+| **Mood toggles** | Folded into **Genres** (Dark, Lo-fi, Instrumental, etc.). Instrumental also sets API `force_instrumental`. |
+| **Set tempo** | On by default; slider starts at **Live’s set tempo** and adds BPM to the prompt. When enabled, generate also sets **`song.tempo`** in the Live Set. |
+| **Prompt influence** | Slider **0–1** (default 0.3). |
+| **Negative prompt** | Optional comma-separated styles to avoid (e.g. vocals, distortion). Uses a **composition plan** with `negative_global_styles` instead of plain prompt mode. |
+| **Auto duration** | Off by default — sends `music_length_ms` from the duration slider (default 30 s). Check to let the API pick length from the prompt. |
+| **Quality** | MP3 bitrates, PCM, or Opus (`output_format`). MP3 192 / PCM need Creator or Pro. |
+| **Model** | **Music v1** (default) or **Music v2** — inline row, half-width dropdown. v2 may need API early access. |
 | **Seamless Loop** | Uses API `loop` generation mode; clip **Loop** is set in Live on import. |
 
-The composed prompt merges selected genres, tempo, mood toggles, and your description before calling the music API (direct `/v1/music` POST for v2 / loop support).
+The composed prompt merges selected genres, optional tempo, and your description before calling the music API (direct `/v1/music` POST for v2 / loop support).
 
 #### Drum rack SFX (`Drum Rack` context menu)
 
@@ -185,7 +218,7 @@ Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem 
 
 ### Install & run (pre-built `.ablx`)
 
-Download `elevenlabs-ableton-0.4.0.ablx` from a [GitHub Release](CHANGELOG.md) (or run `npm run package` locally).
+Download `elevenlabs-ableton-0.5.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
 
 1. Open **Live → Preferences → Extensions**
 2. **Drag and drop** the `.ablx` onto the Extensions page
@@ -216,12 +249,19 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.2.0** | SFX, music, batch TTS, voice changer, vocal isolation, Scribe, Simpler workflows, post-import FX |
 | **0.3.0** | Voice library picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules; enhanced SFX/Music/Drum Rack modals |
+| **0.5.0** | Session voice isolation; SFX/Music modal UX; Live tempo sync; audio-slot guards; UI layout polish |
 
 Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
 
 ---
 
 ## Roadmap
+
+### Shipped (v0.5.0)
+
+- Session **Isolate Voice** on audio clip slots and clips  
+- SFX / Music modal layout — titles, auto-duration defaults, tempo sync, half-width Model/Quality rows  
+- Audio-track clip slot guards for Session generators  
 
 ### Shipped (v0.4.0)
 
@@ -231,7 +271,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 - Pronunciation dictionary rules (auto-applied to TTS)  
 - SFX / Music / Drum Rack modals — sliders, models, loops, randomizers, music session multi-variant clip loading  
 
-### Planned (v0.5.0+)
+### Planned (v0.6.0+)
 
 | Priority | Feature |
 |----------|---------|
@@ -387,7 +427,23 @@ npm run package
 1. Open **Live 12.4 Alpha/Beta**
 2. Preferences → **Extensions** → enable **Developer Mode**
 3. Run `npm start` (or `extensions-cli run`) so Live loads the extension
-4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.4.0 active — 19 features`
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.5.0 active — 19 features`
+
+---
+
+## Package for release
+
+From the project root, with **Node.js ≥ 24.14.1** and `vendor/*.tgz` SDK packages installed:
+
+```bash
+npm install
+npm run check:api          # optional — needs ELEVENLABS_API_KEY
+npm run package            # production build + elevenlabs-ableton-0.5.0.ablx
+```
+
+`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v050).
+
+Manual steps before tagging: align versions in `src/version.ts`, `manifest.json`, and `package.json`; run [docs/pre-release-checklist.md](docs/pre-release-checklist.md).
 
 ---
 
@@ -448,10 +504,11 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 
 | Document | Audience |
 |----------|----------|
-| [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.4.0) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.5.0) |
 | [LICENSE](LICENSE) | GPL-3.0-or-later terms |
 | [docs/roadmap.md](docs/roadmap.md) | Planned features |
-| [docs/v0.4.0-features.md](docs/v0.4.0-features.md) | Latest feature spec |
+| [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | Latest feature spec |
+| [docs/v0.4.0-features.md](docs/v0.4.0-features.md) | v0.4.0 feature spec |
 | [docs/code-review-notes.md](docs/code-review-notes.md) | Architecture review notes |
 | [docs/project-context.md](docs/project-context.md) | Lean dev/agent context |
 | [../ABLETON-ELEVENLABS-RESEARCH.md](../ABLETON-ELEVENLABS-RESEARCH.md) | Full ElevenLabs ↔ Ableton research |

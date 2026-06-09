@@ -1,6 +1,12 @@
-import { AudioTrack, ClipSlot, Track } from "@ableton-extensions/sdk";
+import { AudioTrack, ClipSlot } from "@ableton-extensions/sdk";
 
-import { isAudioTrack, isTrack } from "./sdk-objects.js";
+import { isAudioTrack } from "./sdk-objects.js";
+
+/** Session clip slots on audio tracks can receive imported audio clips. */
+export function isAudioClipSlot(slot: ClipSlot<"1.0.0">): boolean {
+  const parent = slot.parent;
+  return Boolean(parent && isAudioTrack(parent));
+}
 
 /** Clip slots on the same track, starting at the selection and moving down in Session View. */
 export function consecutiveClipSlotsFrom(
@@ -11,16 +17,15 @@ export function consecutiveClipSlotsFrom(
     throw new Error("Variant count must be at least 1.");
   }
 
-  const parent = startSlot.parent;
-  if (!parent || !isTrack(parent)) {
-    throw new Error("Selected clip slot is not on a track.");
-  }
-  if (!isAudioTrack(parent)) {
-    throw new Error("Music variants require an audio track clip slot.");
+  if (!isAudioClipSlot(startSlot)) {
+    throw new Error("Generated audio requires an audio track clip slot.");
   }
 
+  const parent = startSlot.parent as AudioTrack<"1.0.0">;
   const slots = parent.clipSlots;
-  const startIndex = slots.findIndex((slot) => slot.handle === startSlot.handle);
+  const startIndex = slots.findIndex(
+    (slot) => slot.handle === startSlot.handle || slot === startSlot,
+  );
   if (startIndex < 0) {
     throw new Error("Could not find the selected clip slot on its track.");
   }

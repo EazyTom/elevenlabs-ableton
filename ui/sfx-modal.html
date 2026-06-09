@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ElevenLabs SFX</title>
+  <title>Generate Sound Effects</title>
   {{SFX_PROMPT_RANDOMIZER}}
   <script>
     function doSendMessage(message) {
@@ -23,11 +23,29 @@
     }
 
     function updateDurationLabel() {
+      if (document.getElementById("autoDuration").checked) {
+        document.getElementById("durationValue").textContent = "Auto";
+        return;
+      }
       document.getElementById("durationValue").textContent = `${durationFromSlider().toFixed(1)} sec`;
     }
 
     function updateVariantsLabel() {
       document.getElementById("variantsValue").textContent = document.getElementById("variants").value;
+    }
+
+    function influenceFromSlider() {
+      return parseInt(document.getElementById("influence").value, 10) / 10;
+    }
+
+    function updateInfluenceLabel() {
+      document.getElementById("influenceValue").textContent = influenceFromSlider().toFixed(1);
+    }
+
+    function syncAutoDurationUi() {
+      const auto = document.getElementById("autoDuration").checked;
+      document.getElementById("duration").disabled = auto;
+      updateDurationLabel();
     }
 
     function syncLoopModelUi() {
@@ -40,14 +58,18 @@
 
     function submit() {
       const text = document.getElementById("text").value.trim();
-      const influence = parseFloat(document.getElementById("influence").value);
+      const influence = influenceFromSlider();
       const variants = parseInt(document.getElementById("variants").value, 10);
+      const autoDuration = document.getElementById("autoDuration").checked;
       if (!text) return;
       closeWithResult({
         cancelled: false,
         text,
-        durationSeconds: durationFromSlider(),
-        promptInfluence: Number.isFinite(influence) ? influence : undefined,
+        autoDuration,
+        durationSeconds: autoDuration ? undefined : durationFromSlider(),
+        promptInfluence: influence,
+        negativePrompt: document.getElementById("negativePrompt").value.trim() || undefined,
+        outputFormat: document.getElementById("outputFormat").value,
         loop: document.getElementById("loop").checked,
         modelId: document.getElementById("modelId").value,
         variants: Number.isFinite(variants) ? variants : 1,
@@ -56,18 +78,23 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("text").focus();
+      document.getElementById("autoDuration").addEventListener("change", syncAutoDurationUi);
       document.getElementById("duration").addEventListener("input", updateDurationLabel);
       document.getElementById("variants").addEventListener("input", updateVariantsLabel);
+      document.getElementById("influence").addEventListener("input", updateInfluenceLabel);
       document.getElementById("loop").addEventListener("change", syncLoopModelUi);
+      syncAutoDurationUi();
       updateDurationLabel();
       updateVariantsLabel();
+      updateInfluenceLabel();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
       });
     });
   </script>
   <style>
-    textarea { min-height: 4em; }
+    textarea { min-height: 3.5em; }
+    #negativePrompt { min-height: 2.5em; }
     body { gap: 0.65em; overflow-y: auto; }
     .prompt-header {
       display: flex;
@@ -76,23 +103,16 @@
       gap: 0.5em;
     }
     .prompt-header label { flex: 1; margin: 0; }
-    .loop-hint { font-size: 0.95em; }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-    }
-    .slider-row input[type="range"] { flex: 1; }
+    .loop-hint, .quality-hint { font-size: 0.95em; }
     .slider-value { min-width: 4.5em; color: var(--c-accent-secondary); }
-    .stack-column {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5em;
+    .control-label {
+      min-width: 6.5em;
+      flex-shrink: 0;
     }
-    .stack-column label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25em;
+    .tempo-row .control-label { min-width: 4.5em; }
+    .row-gutter {
+      width: 1.15em;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -103,38 +123,61 @@
   </div>
   <textarea id="text" placeholder="e.g. cinematic whoosh, 808 kick, dog bark…"></textarea>
 
-  <label class="slider-row">
-    <span>Duration</span>
-    <input id="duration" type="range" min="1" max="44" step="1" value="6" />
-    <span id="durationValue" class="slider-value">3.0 sec</span>
+  <label for="negativePrompt">Negative prompt (optional)</label>
+  <textarea id="negativePrompt" placeholder="Terms to avoid — distortion, vocals, harsh highs…"></textarea>
+
+  <label class="select-row" for="modelId">
+    <span class="control-label">Model</span>
+    <select id="modelId">
+      <option value="eleven_text_to_sound_v1">SFX v1</option>
+      <option value="eleven_text_to_sound_v2" selected>SFX v2</option>
+    </select>
   </label>
 
-  <label class="slider-row">
-    <span>Variants</span>
+  <label class="select-row" for="outputFormat">
+    <span class="control-label">Quality</span>
+    <select id="outputFormat">
+      <option value="mp3_44100_128" selected>MP3 128 kbps (default)</option>
+      <option value="mp3_44100_64">MP3 64 kbps</option>
+      <option value="mp3_44100_96">MP3 96 kbps</option>
+      <option value="mp3_44100_192">MP3 192 kbps</option>
+      <option value="pcm_44100">PCM 44.1 kHz</option>
+      <option value="opus_48000_128">Opus 128 kbps</option>
+    </select>
+  </label>
+
+  <label class="checkbox">
+    <input id="autoDuration" type="checkbox" checked />
+    Auto duration (API guesses from prompt)
+  </label>
+
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Duration</span>
+    <input id="duration" type="range" min="1" max="60" step="1" value="6" disabled />
+    <span id="durationValue" class="slider-value">Auto</span>
+  </label>
+
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Variants</span>
     <input id="variants" type="range" min="1" max="10" step="1" value="1" />
     <span id="variantsValue" class="slider-value">1</span>
   </label>
 
-  <div class="row">
-    <label for="influence">Prompt influence (0–1)
-      <input id="influence" type="number" min="0" max="1" step="0.1" placeholder="0.3" />
-    </label>
-  </div>
-
-  <div class="stack-column">
-    <label for="modelId">Model
-      <select id="modelId">
-        <option value="eleven_text_to_sound_v1">SFX v1</option>
-        <option value="eleven_text_to_sound_v2" selected>SFX v2</option>
-      </select>
-    </label>
-  </div>
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Influence</span>
+    <input id="influence" type="range" min="0" max="10" step="1" value="3" />
+    <span id="influenceValue" class="slider-value">0.3</span>
+  </label>
 
   <label class="checkbox">
     <input id="loop" type="checkbox" />
     Seamless Loop
   </label>
-  <p class="hint loop-hint">For loops, try 2–8 seconds duration.</p>
+  <p class="hint loop-hint">For loops, try 2–8 seconds duration. Session variants load into this slot and the slots below.</p>
+  <p class="hint quality-hint">MP3 192 kbps and PCM formats require a higher ElevenLabs plan (Creator or Pro).</p>
 
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>

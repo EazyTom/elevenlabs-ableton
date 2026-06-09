@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ElevenLabs TTS</title>
+  <title>ElevenLabs Text-to-Speech</title>
   <script>
     function doSendMessage(message) {
       if (window.webkit?.messageHandlers?.live) {
@@ -82,7 +82,7 @@
 </head>
 <body>
   <label for="text">Text to speak</label>
-  <textarea id="text" placeholder="Enter text for ElevenLabs TTS…"></textarea>
+  <textarea id="text" placeholder="Enter text for ElevenLabs text-to-speech…"></textarea>
 
   <label for="voiceSelect">Voice (from library)</label>
   <select id="voiceSelect" onchange="onVoiceSelect()">{{VOICE_OPTIONS}}</select>

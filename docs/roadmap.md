@@ -8,6 +8,7 @@
 | **0.2.0** | SFX, music, batch TTS, voice changer, vocal isolation, Scribe, Simpler, post-import FX |
 | **0.3.0** | Voice picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules, refactor |
+| **0.5.0** | Session voice isolation, modal UX/tempo sync, audio-slot guards, UI layout |
 
 ---
 

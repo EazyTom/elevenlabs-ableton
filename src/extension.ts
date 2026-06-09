@@ -4,7 +4,6 @@ import type { ArrangementSelection, ClipSlotSelection, Handle } from "@ableton-e
 import {
   AudioClip,
   AudioTrack,
-  ClipSlot,
   DrumRack,
   initialize,
   Simpler,
@@ -14,7 +13,9 @@ import {
 import { resolveAudioPathForClip } from "./audio-io.js";
 import {
   arrangementClipArgs,
+  audioClipSlotsFromSelection,
   getPrimaryAudioTrack,
+  resolveAudioClipSlot,
   resolveHandle,
   selectionDuration,
   type ExtensionContext,
@@ -35,6 +36,8 @@ import {
   pipelineTranscribeToMidi,
   pipelineTts,
   pipelineVocalIsolation,
+  pipelineVocalIsolationClip,
+  pipelineVocalIsolationClipSlot,
   pipelineVoiceChanger,
   withElevenLabsProgress,
 } from "./pipelines.js";
@@ -67,6 +70,8 @@ const COMMANDS = {
   batchTts: `${NS}.batchTts`,
   voiceChanger: `${NS}.voiceChanger`,
   vocalIsolation: `${NS}.vocalIsolation`,
+  vocalIsolationClipSlot: `${NS}.vocalIsolationClipSlot`,
+  vocalIsolationClip: `${NS}.vocalIsolationClip`,
   transcribeClip: `${NS}.transcribeClip`,
   transcribeArrangement: `${NS}.transcribeArrangement`,
   simplerTts: `${NS}.simplerTts`,
@@ -96,17 +101,18 @@ function register(context: ExtensionContext, commandId: string, handler: (arg: u
 function registerMenus(context: ExtensionContext): void {
   const menu = context.ui.registerContextMenuAction.bind(context.ui);
 
-  menu("ClipSlot", "Generate TTS (ElevenLabs)", COMMANDS.ttsClipSlot);
+  menu("ClipSlot", "Generate Text-to-Speech (ElevenLabs)", COMMANDS.ttsClipSlot);
   menu("ClipSlot", "Generate SFX (ElevenLabs)", COMMANDS.sfxClipSlot);
   menu("ClipSlot", "Generate Music (ElevenLabs)", COMMANDS.musicClipSlot);
   menu("ClipSlot", "Generate Dialogue (ElevenLabs)", COMMANDS.dialogueClipSlot);
-  menu("ClipSlotSelection", "Batch TTS (ElevenLabs)", COMMANDS.batchTts);
+  menu("ClipSlot", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolationClipSlot);
+  menu("ClipSlotSelection", "Batch Text-to-Speech (ElevenLabs)", COMMANDS.batchTts);
 
-  menu("AudioTrack.ArrangementSelection", "Generate TTS (ElevenLabs)", COMMANDS.ttsArrangement);
+  menu("AudioTrack.ArrangementSelection", "Generate Text-to-Speech (ElevenLabs)", COMMANDS.ttsArrangement);
   menu("AudioTrack.ArrangementSelection", "Generate SFX (ElevenLabs)", COMMANDS.sfxArrangement);
   menu("AudioTrack.ArrangementSelection", "Generate Music (ElevenLabs)", COMMANDS.musicArrangement);
   menu("AudioTrack.ArrangementSelection", "Change Voice (ElevenLabs)", COMMANDS.voiceChanger);
-  menu("AudioTrack.ArrangementSelection", "Isolate Vocals (ElevenLabs)", COMMANDS.vocalIsolation);
+  menu("AudioTrack.ArrangementSelection", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolation);
   menu("AudioTrack.ArrangementSelection", "Transcribe (ElevenLabs Scribe)", COMMANDS.transcribeArrangement);
   menu("AudioTrack.ArrangementSelection", "Generate Dialogue (ElevenLabs)", COMMANDS.dialogueArrangement);
   menu("AudioTrack.ArrangementSelection", "Transcribe to MIDI Lyrics (ElevenLabs)", COMMANDS.transcribeToMidiArrangement);
@@ -118,12 +124,13 @@ function registerMenus(context: ExtensionContext): void {
   menu("AudioClip", "Transcribe to MIDI Lyrics (ElevenLabs)", COMMANDS.transcribeToMidiClip);
   menu("AudioClip", "Align Lyrics to MIDI (ElevenLabs)", COMMANDS.alignToMidiClip);
   menu("AudioClip", "Clone Voice from Clip (ElevenLabs)", COMMANDS.cloneVoiceClip);
+  menu("AudioClip", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolationClip);
   menu("AudioClip", "Separate Stems (ElevenLabs)", COMMANDS.stemSeparationClip);
 
   menu("AudioTrack", "Add Pronunciation Rule (ElevenLabs)", COMMANDS.pronunciationRule);
 
   menu("DrumRack", "Generate SFX for Pad (ElevenLabs)", COMMANDS.drumRackSfx);
-  menu("Simpler", "Generate TTS Sample (ElevenLabs)", COMMANDS.simplerTts);
+  menu("Simpler", "Generate Text-to-Speech Sample (ElevenLabs)", COMMANDS.simplerTts);
   menu("Simpler", "Generate SFX Sample (ElevenLabs)", COMMANDS.simplerSfx);
 }
 
@@ -133,9 +140,11 @@ export function activate(activation: ActivationContext) {
 
   register(context, COMMANDS.ttsClipSlot, (arg) => {
     runSafe(async () => {
+      const slot = resolveAudioClipSlot(context, arg as Handle);
+      if (!slot) return;
       const modal = await promptTts(context);
       if (!modal) return;
-      await pipelineTts(context, modal, resolveHandle(context, arg as Handle, ClipSlot), {});
+      await pipelineTts(context, modal, slot, {});
     });
   });
 
@@ -152,9 +161,11 @@ export function activate(activation: ActivationContext) {
 
   register(context, COMMANDS.sfxClipSlot, (arg) => {
     runSafe(async () => {
+      const slot = resolveAudioClipSlot(context, arg as Handle);
+      if (!slot) return;
       const modal = await promptSfx(context);
       if (!modal) return;
-      await pipelineSfx(context, modal, resolveHandle(context, arg as Handle, ClipSlot), {});
+      await pipelineSfx(context, modal, slot, {}, "session");
     });
   });
 
@@ -165,21 +176,17 @@ export function activate(activation: ActivationContext) {
       if (!modal) return;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
-      await pipelineSfx(context, modal, track, arrangementClipArgs(selection));
+      await pipelineSfx(context, modal, track, arrangementClipArgs(selection), "arrangement");
     });
   });
 
   register(context, COMMANDS.musicClipSlot, (arg) => {
     runSafe(async () => {
+      const slot = resolveAudioClipSlot(context, arg as Handle);
+      if (!slot) return;
       const modal = await promptMusic(context);
       if (!modal) return;
-      await pipelineMusic(
-        context,
-        modal,
-        resolveHandle(context, arg as Handle, ClipSlot),
-        {},
-        "session",
-      );
+      await pipelineMusic(context, modal, slot, {}, "session");
     });
   });
 
@@ -197,15 +204,13 @@ export function activate(activation: ActivationContext) {
   register(context, COMMANDS.batchTts, (arg) => {
     runSafe(async () => {
       const selection = arg as ClipSlotSelection;
+      const slots = audioClipSlotsFromSelection(context, selection);
+      if (!slots.length) return;
+
       const modal = await promptTts(context);
       if (!modal) return;
 
-      const slots = selection.selected_clip_slots.map((h) =>
-        resolveHandle(context, h, ClipSlot),
-      );
-      if (!slots.length) return;
-
-      await withElevenLabsProgress(context, "ElevenLabs Batch TTS", async (client, update, signal) => {
+      await withElevenLabsProgress(context, "ElevenLabs Batch Text-to-Speech", async (client, update, signal) => {
         if (signal.aborted) return;
         update("Generating speech", 35);
         const config = await loadStorageConfig(context.environment.storageDirectory);
@@ -264,6 +269,21 @@ export function activate(activation: ActivationContext) {
     });
   });
 
+  register(context, COMMANDS.vocalIsolationClipSlot, (arg) => {
+    runSafe(async () => {
+      const slot = resolveAudioClipSlot(context, arg as Handle);
+      if (!slot) return;
+      await pipelineVocalIsolationClipSlot(context, slot);
+    });
+  });
+
+  register(context, COMMANDS.vocalIsolationClip, (arg) => {
+    runSafe(async () => {
+      const clip = resolveHandle(context, arg as Handle, AudioClip);
+      await pipelineVocalIsolationClip(context, clip);
+    });
+  });
+
   register(context, COMMANDS.transcribeClip, (arg) => {
     runSafe(async () => {
       const clip = resolveHandle(context, arg as Handle, AudioClip);
@@ -305,9 +325,11 @@ export function activate(activation: ActivationContext) {
 
   register(context, COMMANDS.dialogueClipSlot, (arg) => {
     runSafe(async () => {
+      const slot = resolveAudioClipSlot(context, arg as Handle);
+      if (!slot) return;
       const modal = await promptDialogue(context);
       if (!modal) return;
-      await pipelineDialogue(context, modal, resolveHandle(context, arg as Handle, ClipSlot), {});
+      await pipelineDialogue(context, modal, slot, {});
     });
   });
 

@@ -13,7 +13,10 @@ export interface SfxModalResult {
   cancelled?: boolean;
   text?: string;
   durationSeconds?: number;
+  autoDuration?: boolean;
   promptInfluence?: number;
+  negativePrompt?: string;
+  outputFormat?: string;
   loop?: boolean;
   modelId?: "eleven_text_to_sound_v1" | "eleven_text_to_sound_v2";
   /** Number of generations to create (1–10); user picks one when > 1. */
@@ -34,14 +37,15 @@ export interface MusicModalResult {
   cancelled?: boolean;
   prompt?: string;
   musicLengthMs?: number;
+  autoDuration?: boolean;
   forceInstrumental?: boolean;
-  /** Genre toggle keys (trap, house, epic, …). */
+  /** Genre toggle keys (trap, house, epic, dark, …). */
   genres?: string[];
   tempoBpm?: number;
-  highEnergy?: boolean;
-  darkMood?: boolean;
-  loFi?: boolean;
   loop?: boolean;
+  promptInfluence?: number;
+  negativePrompt?: string;
+  outputFormat?: string;
   modelId?: "music_v1" | "music_v2";
   /** Number of generations to create (1–10); user picks one when > 1. */
   variants?: number;
@@ -57,7 +61,9 @@ export interface DialogueModalResult {
   cancelled?: boolean;
   voiceA?: string;
   voiceB?: string;
+  voiceC?: string;
   script?: string;
+  stability?: number;
 }
 
 export interface DrumRackSfxModalResult {
@@ -65,7 +71,10 @@ export interface DrumRackSfxModalResult {
   midiNote?: number;
   text?: string;
   durationSeconds?: number;
+  autoDuration?: boolean;
   promptInfluence?: number;
+  negativePrompt?: string;
+  outputFormat?: string;
   loop?: boolean;
   modelId?: "eleven_text_to_sound_v1" | "eleven_text_to_sound_v2";
   variants?: number;

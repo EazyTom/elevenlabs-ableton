@@ -1,5 +1,6 @@
 import type { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
+import { parseAudioOutputFormat } from "./audio-output-formats.js";
 import { generateSfx, type SfxRequest } from "./elevenlabs-client.js";
 import type { SfxModalResult } from "./types.js";
 
@@ -15,7 +16,10 @@ export function sfxRequestFromModal(modal: SfxModalResult): SfxRequest {
   return {
     text: modal.text!,
     durationSeconds: modal.durationSeconds,
+    autoDuration: modal.autoDuration,
     promptInfluence: modal.promptInfluence,
+    negativePrompt: modal.negativePrompt,
+    outputFormat: parseAudioOutputFormat(modal.outputFormat),
     loop: modal.loop,
     modelId: modal.modelId,
   };
@@ -40,4 +44,14 @@ export async function generateSfxVariants(
   }
 
   return variants;
+}
+
+export async function generateAllSfxVariants(
+  client: ElevenLabsClient,
+  modal: SfxModalResult,
+  onProgress?: (index: number, total: number) => void,
+): Promise<Uint8Array[]> {
+  const count = clampSfxVariants(modal.variants);
+  const request = sfxRequestFromModal(modal);
+  return generateSfxVariants(client, request, count, onProgress);
 }

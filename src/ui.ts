@@ -22,7 +22,9 @@ import {
 } from "./elevenlabs-client.js";
 import { listPadsWithSimpler, type DrumPadSummary } from "./drum-io.js";
 import { DRUM_RACK_START_NOTE } from "./drum-kit.js";
-import { buildMusicPromptRandomizerScript } from "./music-prompt.js";
+import { parseAudioOutputFormat } from "./audio-output-formats.js";
+import { clampMusicLengthMs } from "./music-length.js";
+import { buildMusicPromptRandomizerScript, musicForceInstrumental } from "./music-prompt.js";
 import { clampMusicVariants } from "./music-variants.js";
 import { buildSfxPromptRandomizerScript } from "./sfx-prompt.js";
 import { clampSfxVariants } from "./sfx-variants.js";
@@ -115,23 +117,47 @@ function prepareSfxModalHtml(template: string): string {
   return template.replace(/\{\{SFX_PROMPT_RANDOMIZER\}\}/g, buildSfxPromptRandomizerScript());
 }
 
-function prepareMusicModalHtml(template: string): string {
-  return template.replace(/\{\{MUSIC_PROMPT_RANDOMIZER\}\}/g, buildMusicPromptRandomizerScript());
+function clampLiveTempoForSlider(tempo: number): number {
+  if (!Number.isFinite(tempo)) return 120;
+  return Math.min(200, Math.max(40, Math.round(tempo)));
+}
+
+function prepareMusicModalHtml(template: string, liveTempo: number): string {
+  const tempo = clampLiveTempoForSlider(liveTempo);
+  return template
+    .replace(/\{\{MUSIC_PROMPT_RANDOMIZER\}\}/g, buildMusicPromptRandomizerScript())
+    .replace(/\{\{LIVE_TEMPO\}\}/g, String(tempo));
 }
 
 function normalizeMusicModalResult(parsed: MusicModalResult): MusicModalResult {
+  const negativePrompt = parsed.negativePrompt?.trim();
+  const autoDuration = parsed.autoDuration ?? false;
+  const musicLengthMs = autoDuration
+    ? undefined
+    : clampMusicLengthMs(parsed.musicLengthMs);
   return {
     ...parsed,
+    autoDuration,
+    musicLengthMs,
+    forceInstrumental: musicForceInstrumental(parsed),
     variants: clampMusicVariants(parsed.variants),
     modelId: parsed.modelId === "music_v1" ? "music_v1" : "music_v2",
+    outputFormat: parseAudioOutputFormat(parsed.outputFormat),
+    promptInfluence: parsed.promptInfluence ?? 0.3,
+    negativePrompt: negativePrompt || undefined,
   };
 }
 
 function normalizeSfxModalResult(parsed: SfxModalResult): SfxModalResult {
+  const autoDuration = parsed.autoDuration ?? true;
   return {
     ...parsed,
+    autoDuration,
+    durationSeconds: autoDuration ? undefined : parsed.durationSeconds,
     variants: clampSfxVariants(parsed.variants),
     modelId: parsed.modelId === "eleven_text_to_sound_v1" ? "eleven_text_to_sound_v1" : "eleven_text_to_sound_v2",
+    outputFormat: parseAudioOutputFormat(parsed.outputFormat),
+    promptInfluence: parsed.promptInfluence ?? 0.3,
   };
 }
 
@@ -199,7 +225,7 @@ export async function promptTts(context: ExtensionContext): Promise<TextVoiceMod
     injectVoiceOptions(ttsModalHtml, voices),
     420,
     520,
-    "Text to speech",
+    "Text-to-Speech",
   );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
   return parsed;
@@ -210,20 +236,21 @@ export async function promptSfx(context: ExtensionContext): Promise<SfxModalResu
     context,
     prepareSfxModalHtml(sfxModalHtml),
     420,
-    500,
-    "Sound effects",
+    640,
+    "Generate Sound Effects",
   );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
   return normalizeSfxModalResult(parsed);
 }
 
 export async function promptMusic(context: ExtensionContext): Promise<MusicModalResult | null> {
+  const liveTempo = context.application.song.tempo;
   const parsed = await showModal<MusicModalResult>(
     context,
-    prepareMusicModalHtml(musicModalHtml),
+    prepareMusicModalHtml(musicModalHtml, liveTempo),
     460,
-    680,
-    "Music generation",
+    780,
+    "Generate Music",
   );
   if (parsed.cancelled || (!parsed.prompt?.trim() && !(parsed.genres?.length))) return null;
   return normalizeMusicModalResult(parsed);
@@ -247,9 +274,18 @@ export async function promptDialogue(context: ExtensionContext): Promise<Dialogu
   const options = buildVoiceOptionsHtml(voices);
   const html = dialogueModalHtml
     .replace("{{VOICE_OPTIONS_A}}", options)
-    .replace("{{VOICE_OPTIONS_B}}", options);
-  const parsed = await showModal<DialogueModalResult>(context, html, 460, 400, "Text to dialogue");
-  if (parsed.cancelled || !parsed.script?.trim() || !parsed.voiceA || !parsed.voiceB) return null;
+    .replace("{{VOICE_OPTIONS_B}}", options)
+    .replace("{{VOICE_OPTIONS_C}}", options);
+  const parsed = await showModal<DialogueModalResult>(context, html, 480, 520, "Text to dialogue");
+  if (
+    parsed.cancelled ||
+    !parsed.script?.trim() ||
+    !parsed.voiceA ||
+    !parsed.voiceB ||
+    !parsed.voiceC
+  ) {
+    return null;
+  }
   return parsed;
 }
 
@@ -265,7 +301,7 @@ export async function promptDrumRackSfx(
     context,
     html,
     440,
-    620,
+    760,
     "Drum rack SFX",
   );
   if (parsed.cancelled) return null;

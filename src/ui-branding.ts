@@ -72,6 +72,17 @@ ${buildThemeCssVariables(theme)}
     outline-offset: 1px;
   }
 
+  .select-row select,
+  .stack-column select {
+    width: 50%;
+    max-width: 50%;
+  }
+
+  .select-row select {
+    flex: 0 0 50%;
+    min-width: 0;
+  }
+
   option {
     background: var(--c-input-bg);
     color: var(--c-text);

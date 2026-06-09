@@ -1,5 +1,6 @@
 import type { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
+  AudioClip,
   AudioTrack,
   ClipSlot,
   DrumRack,
@@ -11,6 +12,7 @@ import {
   importAndCreateClip,
   importBytesToSimpler,
   requireTempDirectory,
+  resolveAudioPathForClip,
   writeTempAudio,
 } from "./audio-io.js";
 import {
@@ -41,7 +43,7 @@ import {
   drumKitMidiNote,
 } from "./drum-kit.js";
 import type { ExtensionContext } from "./live-selection.js";
-import { isClipSlot } from "./sdk-objects.js";
+import { isAudioTrack, isClipSlot } from "./sdk-objects.js";
 import { applyVocalPostFx, setTrackVolume } from "./live-io.js";
 import { alignedWordsToLyricNotes, wordsToLyricNotes } from "./midi-io.js";
 import {
@@ -64,6 +66,7 @@ import type {
   StemSeparationModalResult,
   TextVoiceModalResult,
 } from "./types.js";
+import { parseAudioOutputFormat, importFilename } from "./audio-output-formats.js";
 import { buildMusicPrompt } from "./music-prompt.js";
 import { consecutiveClipSlotsFrom } from "./clip-io.js";
 import {
@@ -73,6 +76,7 @@ import {
 } from "./music-variants.js";
 import {
   clampSfxVariants,
+  generateAllSfxVariants,
   generateSfxVariants,
   sfxRequestFromModal,
 } from "./sfx-variants.js";
@@ -116,26 +120,37 @@ async function activePronunciationLocators(
   return [{ pronunciationDictionaryId: active.id, versionId: active.versionId }];
 }
 
-async function generateAndPickSfx(
+async function generateSfxVariantsInProgress(
   context: ExtensionContext,
+  title: string,
+  modal: SfxModalResult,
+): Promise<Uint8Array[] | null> {
+  let generated: Uint8Array[] | null = null;
+  await withElevenLabsProgress(context, title, async (client, update, signal) => {
+    if (signal.aborted) return;
+    generated = await generateAllSfxVariantsWithProgress(client, modal, update, signal);
+  });
+  return generated;
+}
+
+async function generateAllSfxVariantsWithProgress(
   client: ElevenLabsClient,
   modal: SfxModalResult,
   update: (text: string, progress?: number) => void,
   signal: AbortSignal,
-): Promise<Uint8Array | null> {
+): Promise<Uint8Array[] | null> {
   const count = clampSfxVariants(modal.variants);
-  const request = sfxRequestFromModal(modal);
 
   if (count === 1) {
     update("Generating sound effect", 45);
-    const bytes = await generateSfx(client, request);
+    const bytes = await generateSfx(client, sfxRequestFromModal(modal));
     if (bytes.byteLength < 200) {
       throw new Error("Generated audio is empty or too small to import into Live.");
     }
-    return bytes;
+    return [bytes];
   }
 
-  const variants = await generateSfxVariants(client, request, count, (index, total) => {
+  const variants = await generateAllSfxVariants(client, modal, (index, total) => {
     if (signal.aborted) return;
     update(
       `Generating variant ${index} of ${total}`,
@@ -144,8 +159,7 @@ async function generateAndPickSfx(
   });
 
   if (signal.aborted) return null;
-  update("Choose a variant", 78);
-  return promptSfxVariantPick(context, variants);
+  return variants;
 }
 
 async function generateAllMusicVariants(
@@ -188,7 +202,10 @@ function drumRackSfxRequest(modal: DrumRackSfxModalResult, text: string) {
   return {
     text,
     durationSeconds: modal.durationSeconds,
+    autoDuration: modal.autoDuration,
     promptInfluence: modal.promptInfluence,
+    negativePrompt: modal.negativePrompt,
+    outputFormat: parseAudioOutputFormat(modal.outputFormat),
     loop: modal.loop,
     modelId: modal.modelId,
   };
@@ -266,7 +283,7 @@ async function pipelineDrumRackMultiPad(
         drumRack,
         midiNote,
         variants[i]!,
-        `elevenlabs-drum-${midiNote}.mp3`,
+        importFilename(`elevenlabs-drum-${midiNote}`, parseAudioOutputFormat(modal.outputFormat)),
       );
     }
     update("Done", 100);
@@ -301,7 +318,7 @@ async function pipelineDrumRackKit(
         drumRack,
         midiNote,
         bytes,
-        `elevenlabs-kit-${piece.id}.mp3`,
+        importFilename(`elevenlabs-kit-${piece.id}`, parseAudioOutputFormat(modal.outputFormat)),
       );
     }
     update("Done", 100);
@@ -326,10 +343,15 @@ export async function importGeneratedAudio(
     await target.deleteClip();
   }
 
-  const tx = context.withinTransaction(() =>
-    importAndCreateClip(context, tempPath, clipArgs, target),
-  );
-  await tx;
+  try {
+    const tx = context.withinTransaction(() =>
+      importAndCreateClip(context, tempPath, clipArgs, target),
+    );
+    await tx;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to import generated audio into Live (${filename}): ${detail}`);
+  }
 
   if (applyPostFx && target instanceof AudioTrack) {
     await applyVocalPostFx(target);
@@ -345,7 +367,7 @@ export async function pipelineTts(
 ): Promise<void> {
   const pronunciationDictionaryLocators = await activePronunciationLocators(context);
 
-  await withElevenLabsProgress(context, "ElevenLabs TTS", async (client, update, signal) => {
+  await withElevenLabsProgress(context, "ElevenLabs Text-to-Speech", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Generating speech", 40);
     const bytes = await generateTts(client, {
@@ -364,24 +386,62 @@ export async function pipelineTts(
   });
 }
 
+export type SfxImportMode = "session" | "arrangement";
+
 export async function pipelineSfx(
   context: ExtensionContext,
   modal: SfxModalResult,
   target: ClipSlot<"1.0.0"> | AudioTrack<"1.0.0"> | TakeLane<"1.0.0">,
   clipArgs: ImportClipArgs,
+  mode: SfxImportMode = "session",
 ): Promise<void> {
-  await withElevenLabsProgress(context, "ElevenLabs SFX", async (client, update, signal) => {
+  const sfxFormat = parseAudioOutputFormat(modal.outputFormat);
+  const generated = await generateSfxVariantsInProgress(context, "ElevenLabs SFX", modal);
+  if (!generated?.length) return;
+
+  let imports = generated;
+  if (mode === "arrangement" && generated.length > 1) {
+    const picked = await promptSfxVariantPick(context, generated);
+    if (!picked) return;
+    imports = [picked];
+  }
+
+  const importClipArgs: ImportClipArgs = { ...clipArgs, looping: modal.loop };
+
+  await withElevenLabsProgress(context, "ElevenLabs SFX", async (_client, update, signal) => {
     if (signal.aborted) return;
-    const bytes = await generateAndPickSfx(context, client, modal, update, signal);
-    if (!bytes || signal.aborted) return;
-    update("Importing into Live", 85);
-    await importGeneratedAudio(
-      context,
-      bytes,
-      "elevenlabs-sfx.mp3",
-      target,
-      { ...clipArgs, looping: modal.loop },
-    );
+
+    if (mode === "session") {
+      if (!isClipSlot(target)) {
+        throw new Error("Session SFX import requires a clip slot target.");
+      }
+      const slots = consecutiveClipSlotsFrom(target, imports.length);
+      for (let i = 0; i < imports.length; i++) {
+        if (signal.aborted) return;
+        update(
+          imports.length === 1 ? "Importing into Live" : `Loading variant ${i + 1} of ${imports.length}`,
+          70 + Math.round((i / imports.length) * 28),
+        );
+        await importGeneratedAudio(
+          context,
+          imports[i]!,
+          imports.length === 1
+            ? importFilename("elevenlabs-sfx", sfxFormat)
+            : importFilename(`elevenlabs-sfx-${i + 1}`, sfxFormat),
+          slots[i]!,
+          importClipArgs,
+        );
+      }
+    } else {
+      update("Importing into Live", 85);
+      await importGeneratedAudio(
+        context,
+        imports[0]!,
+        importFilename("elevenlabs-sfx", sfxFormat),
+        target,
+        importClipArgs,
+      );
+    }
     update("Done", 100);
   });
 }
@@ -396,11 +456,16 @@ export async function pipelineMusic(
   mode: MusicImportMode = "session",
 ): Promise<void> {
   const composedPrompt = buildMusicPrompt(modal);
+  const musicFormat = parseAudioOutputFormat(modal.outputFormat);
   // Generated length comes from the API — don't clip to arrangement selection width.
   const importArgs: ImportClipArgs = {
     startTime: clipArgs.startTime,
     isWarped: clipArgs.isWarped,
   };
+
+  if (modal.tempoBpm !== undefined && modal.tempoBpm >= 40 && modal.tempoBpm <= 200) {
+    context.application.song.tempo = Math.round(modal.tempoBpm);
+  }
 
   await withElevenLabsProgress(context, "ElevenLabs Music", async (client, update, signal) => {
     if (signal.aborted) return;
@@ -423,7 +488,9 @@ export async function pipelineMusic(
         await importGeneratedAudio(
           context,
           variants[i]!,
-          variants.length === 1 ? "elevenlabs-music.mp3" : `elevenlabs-music-${i + 1}.mp3`,
+          variants.length === 1
+            ? importFilename("elevenlabs-music", musicFormat)
+            : importFilename(`elevenlabs-music-${i + 1}`, musicFormat),
           slots[i]!,
           importClipArgs,
         );
@@ -434,10 +501,22 @@ export async function pipelineMusic(
         const picked = await promptSfxVariantPick(context, variants);
         if (!picked || signal.aborted) return;
         update("Importing into Live", 85);
-        await importGeneratedAudio(context, picked, "elevenlabs-music.mp3", target, importClipArgs);
+        await importGeneratedAudio(
+          context,
+          picked,
+          importFilename("elevenlabs-music", musicFormat),
+          target,
+          importClipArgs,
+        );
       } else {
         update("Importing into Live", 85);
-        await importGeneratedAudio(context, variants[0]!, "elevenlabs-music.mp3", target, importClipArgs);
+        await importGeneratedAudio(
+          context,
+          variants[0]!,
+          importFilename("elevenlabs-music", musicFormat),
+          target,
+          importClipArgs,
+        );
       }
     }
     update("Done", 100);
@@ -451,7 +530,7 @@ export async function pipelineSimplerTts(
 ): Promise<void> {
   const pronunciationDictionaryLocators = await activePronunciationLocators(context);
 
-  await withElevenLabsProgress(context, "ElevenLabs TTS → Simpler", async (client, update, signal) => {
+  await withElevenLabsProgress(context, "ElevenLabs Text-to-Speech → Simpler", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Generating speech", 45);
     const bytes = await generateTts(client, {
@@ -475,12 +554,26 @@ export async function pipelineSimplerSfx(
   simpler: Simpler<"1.0.0">,
   modal: SfxModalResult,
 ): Promise<void> {
-  await withElevenLabsProgress(context, "ElevenLabs SFX → Simpler", async (client, update, signal) => {
+  const sfxFormat = parseAudioOutputFormat(modal.outputFormat);
+  const generated = await generateSfxVariantsInProgress(context, "ElevenLabs SFX → Simpler", modal);
+  if (!generated?.length) return;
+
+  let bytes = generated[0]!;
+  if (generated.length > 1) {
+    const picked = await promptSfxVariantPick(context, generated);
+    if (!picked) return;
+    bytes = picked;
+  }
+
+  await withElevenLabsProgress(context, "ElevenLabs SFX → Simpler", async (_client, update, signal) => {
     if (signal.aborted) return;
-    const bytes = await generateAndPickSfx(context, client, modal, update, signal);
-    if (!bytes || signal.aborted) return;
     update("Replacing sample", 85);
-    await importBytesToSimpler(context, bytes, "elevenlabs-simpler-sfx.mp3", simpler);
+    await importBytesToSimpler(
+      context,
+      bytes,
+      importFilename("elevenlabs-simpler-sfx", sfxFormat),
+      simpler,
+    );
     update("Done", 100);
   });
 }
@@ -510,26 +603,99 @@ export async function pipelineVoiceChanger(
   });
 }
 
+const VOICE_ISOLATION_FILENAME = "elevenlabs-voice-isolated.mp3";
+
+async function importIsolatedVoiceToTakeLane(
+  context: ExtensionContext,
+  bytes: Uint8Array,
+  track: AudioTrack<"1.0.0">,
+  clipArgs: ImportClipArgs,
+): Promise<void> {
+  const takeLane = await track.createTakeLane();
+  await importGeneratedAudio(context, bytes, VOICE_ISOLATION_FILENAME, takeLane, clipArgs);
+}
+
+async function importIsolatedVoiceToSlot(
+  context: ExtensionContext,
+  bytes: Uint8Array,
+  slot: ClipSlot<"1.0.0">,
+  clipArgs: ImportClipArgs,
+): Promise<void> {
+  await importGeneratedAudio(context, bytes, VOICE_ISOLATION_FILENAME, slot, clipArgs);
+}
+
 export async function pipelineVocalIsolation(
   context: ExtensionContext,
   track: AudioTrack<"1.0.0">,
   startTime: number,
   endTime: number,
 ): Promise<void> {
-  await withElevenLabsProgress(context, "ElevenLabs Vocal Isolation", async (client, update, signal) => {
+  await withElevenLabsProgress(context, "ElevenLabs Voice Isolation", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Exporting audio from Live", 20);
     const wavPath = await context.resources.renderPreFxAudio(track, startTime, endTime);
     if (signal.aborted) return;
-    update("Isolating vocals", 55);
+    update("Isolating voice", 55);
     const bytes = await isolateVocals(client, wavPath);
     if (signal.aborted) return;
     update("Creating take lane clip", 85);
-    const takeLane = await track.createTakeLane();
-    await importGeneratedAudio(context, bytes, "elevenlabs-vocals.mp3", takeLane, {
-      startTime,
-      duration: endTime - startTime,
-    });
+    await importIsolatedVoiceToTakeLane(
+      context,
+      bytes,
+      track,
+      { startTime, duration: endTime - startTime },
+    );
+    update("Done", 100);
+  });
+}
+
+export async function pipelineVocalIsolationClipSlot(
+  context: ExtensionContext,
+  slot: ClipSlot<"1.0.0">,
+): Promise<void> {
+  const clip = slot.clip;
+  if (!(clip instanceof AudioClip)) return;
+  const audioPath = clip.filePath;
+  if (!audioPath) return;
+
+  await withElevenLabsProgress(context, "ElevenLabs Voice Isolation", async (client, update, signal) => {
+    if (signal.aborted) return;
+    update("Isolating voice", 40);
+    const bytes = await isolateVocals(client, audioPath);
+    if (signal.aborted) return;
+    update("Replacing clip", 85);
+    await importIsolatedVoiceToSlot(context, bytes, slot, { looping: clip.looping });
+    update("Done", 100);
+  });
+}
+
+export async function pipelineVocalIsolationClip(
+  context: ExtensionContext,
+  clip: AudioClip<"1.0.0">,
+): Promise<void> {
+  const audioPath = await resolveAudioPathForClip(clip);
+  if (!audioPath) return;
+
+  const parent = clip.parent;
+  if (parent && isClipSlot(parent)) {
+    await pipelineVocalIsolationClipSlot(context, parent);
+    return;
+  }
+
+  if (!parent || !isAudioTrack(parent)) return;
+
+  await withElevenLabsProgress(context, "ElevenLabs Voice Isolation", async (client, update, signal) => {
+    if (signal.aborted) return;
+    update("Isolating voice", 40);
+    const bytes = await isolateVocals(client, audioPath);
+    if (signal.aborted) return;
+    update("Creating take lane clip", 85);
+    await importIsolatedVoiceToTakeLane(
+      context,
+      bytes,
+      parent,
+      { startTime: clip.startTime, duration: clip.duration },
+    );
     update("Done", 100);
   });
 }
@@ -556,11 +722,15 @@ export async function pipelineDialogue(
   target: ClipSlot<"1.0.0"> | AudioTrack<"1.0.0">,
   clipArgs: ImportClipArgs,
 ): Promise<void> {
-  const lines = parseDialogueScript(modal.script!, modal.voiceA!, modal.voiceB!);
+  const lines = parseDialogueScript(modal.script!, {
+    voiceA: modal.voiceA!,
+    voiceB: modal.voiceB!,
+    voiceC: modal.voiceC!,
+  });
   if (!lines.length) {
     await showError(
       context,
-      "No dialogue lines found. Prefix each line with 1: (speaker A) or 2: (speaker B).\n\nExample:\n1: Hello there\n2: Hi, how are you?",
+      "No dialogue lines found. Prefix each line with 1:, 2:, or 3: for speakers A, B, or C.\n\nExample:\n1: Hello there\n2: Hi, how are you?\n3: [excited] Count me in!",
     );
     return;
   }
@@ -568,7 +738,7 @@ export async function pipelineDialogue(
   await withElevenLabsProgress(context, "ElevenLabs Dialogue", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Generating dialogue", 45);
-    const bytes = await generateDialogue(client, lines);
+    const bytes = await generateDialogue(client, lines, { stability: modal.stability });
     if (signal.aborted) return;
     update("Importing into Live", 85);
     await importGeneratedAudio(context, bytes, "elevenlabs-dialogue.mp3", target, clipArgs);
@@ -601,7 +771,12 @@ export async function pipelineDrumRackSfx(
     const variants = await generateDrumRackVariants(context, client, modal, update, signal, true);
     if (!variants?.length || signal.aborted) return;
     update("Replacing sample", 85);
-    await importBytesToSimpler(context, variants[0]!, "elevenlabs-drum-rack-sfx.mp3", simpler);
+    await importBytesToSimpler(
+      context,
+      variants[0]!,
+      importFilename("elevenlabs-drum-rack-sfx", parseAudioOutputFormat(modal.outputFormat)),
+      simpler,
+    );
     update("Done", 100);
   });
 }
@@ -695,7 +870,7 @@ export async function pipelineCloneVoice(
     await showResult(
       context,
       "Voice cloned",
-      `Name: ${modal.name}\nVoice ID: ${voiceId}\n\nSaved to storage. Use this ID in TTS or voice changer.`,
+      `Name: ${modal.name}\nVoice ID: ${voiceId}\n\nSaved to storage. Use this ID in text-to-speech or voice changer.`,
     );
   });
 }
@@ -732,7 +907,7 @@ export async function pipelinePronunciationRule(
       context,
       "Pronunciation rule saved",
       `Dictionary: ${modal.dictionaryName}\n"${modal.stringToReplace}" → "${modal.alias}"\n\n${
-        modal.setActive ? "Active for subsequent TTS." : "Not set as active."
+        modal.setActive ? "Active for subsequent text-to-speech." : "Not set as active."
       }`,
     );
   });

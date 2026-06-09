@@ -4,6 +4,15 @@ import { readFile } from "fs/promises";
 import path from "path";
 
 import { postJsonBinary, postMultipart, readAudioUpload } from "./multipart-upload.js";
+import {
+  DEFAULT_AUDIO_OUTPUT_FORMAT,
+  type AudioOutputFormat,
+} from "./audio-output-formats.js";
+import { buildMusicCompositionPlan } from "./music-prompt.js";
+import {
+  clampMusicLengthMs,
+} from "./music-length.js";
+import { buildSfxApiText, parseNegativePromptTerms } from "./prompt-utils.js";
 
 const CLIENT_API_KEY = Symbol.for("elevenlabs-ableton.apiKey");
 
@@ -60,7 +69,10 @@ export const DEFAULT_SFX_MODEL: SfxModelId = SFX_MODEL_V2;
 export interface SfxRequest {
   text: string;
   durationSeconds?: number;
+  autoDuration?: boolean;
   promptInfluence?: number;
+  negativePrompt?: string;
+  outputFormat?: AudioOutputFormat;
   loop?: boolean;
   modelId?: SfxModelId;
 }
@@ -73,9 +85,13 @@ export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V1;
 export interface MusicRequest {
   prompt: string;
   musicLengthMs?: number;
+  autoDuration?: boolean;
   forceInstrumental?: boolean;
   modelId?: MusicModelId;
   loop?: boolean;
+  promptInfluence?: number;
+  negativePrompt?: string;
+  outputFormat?: AudioOutputFormat;
 }
 
 export interface VoiceSummary {
@@ -192,26 +208,57 @@ export async function generateSfx(client: ElevenLabsClient, request: SfxRequest)
   const modelId =
     request.loop ? SFX_MODEL_V2 : (request.modelId ?? DEFAULT_SFX_MODEL);
   const stream = await client.textToSoundEffects.convert({
-    text: request.text,
-    durationSeconds: request.durationSeconds,
+    text: buildSfxApiText(request.text, request.negativePrompt),
+    durationSeconds: request.autoDuration ? undefined : request.durationSeconds,
     promptInfluence: request.promptInfluence ?? 0.3,
     loop: request.loop ?? false,
     modelId,
-    outputFormat: "mp3_44100_128",
+    outputFormat: request.outputFormat ?? DEFAULT_AUDIO_OUTPUT_FORMAT,
   });
   return streamToBytes(stream);
 }
 
 export async function generateMusic(client: ElevenLabsClient, request: MusicRequest): Promise<Uint8Array> {
+  const outputFormat = request.outputFormat ?? DEFAULT_AUDIO_OUTPUT_FORMAT;
+  const negativeTerms = parseNegativePromptTerms(request.negativePrompt);
+  const durationMs = request.autoDuration
+    ? undefined
+    : clampMusicLengthMs(request.musicLengthMs);
+  // Composition plans need explicit section timing; auto duration uses prompt + avoid clause.
+  const useCompositionPlan = negativeTerms.length > 0 && durationMs !== undefined;
+
   const body: Record<string, unknown> = {
-    prompt: request.prompt,
-    music_length_ms: request.musicLengthMs ?? 30_000,
-    force_instrumental: request.forceInstrumental ?? false,
     model_id: request.modelId ?? DEFAULT_MUSIC_MODEL,
     generation_mode: request.loop ? "loop" : "track",
   };
+
+  if (request.promptInfluence !== undefined) {
+    body.prompt_influence = request.promptInfluence;
+  }
+
+  if (useCompositionPlan) {
+    body.composition_plan = buildMusicCompositionPlan(
+      request.prompt,
+      negativeTerms,
+      durationMs,
+      { forceInstrumental: request.forceInstrumental },
+    );
+    body.respect_sections_durations = false;
+    body.music_length_ms = durationMs;
+  } else {
+    let prompt = request.prompt;
+    if (negativeTerms.length > 0) {
+      prompt = `${prompt}. Avoid: ${negativeTerms.join(", ")}`;
+    }
+    body.prompt = prompt;
+    body.force_instrumental = request.forceInstrumental ?? false;
+    if (durationMs !== undefined) {
+      body.music_length_ms = durationMs;
+    }
+  }
+
   return postJsonBinary(clientApiKey(client), "/v1/music", body, {
-    output_format: "mp3_44100_128",
+    output_format: outputFormat,
   });
 }
 
@@ -253,10 +300,12 @@ export async function listVoices(
 export async function generateDialogue(
   client: ElevenLabsClient,
   lines: DialogueLine[],
+  options?: { stability?: number },
 ): Promise<Uint8Array> {
   const stream = await client.textToDialogue.convert({
     inputs: lines.map((line) => ({ text: line.text, voiceId: line.voiceId })),
     outputFormat: "mp3_44100_128",
+    settings: options?.stability !== undefined ? { stability: options.stability } : undefined,
   });
   return streamToBytes(stream);
 }

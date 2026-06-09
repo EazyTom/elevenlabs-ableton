@@ -17,16 +17,35 @@
       doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
     }
 
+    function stabilityFromSlider() {
+      return parseInt(document.getElementById("stability").value, 10) / 100;
+    }
+
+    function updateStabilityLabel() {
+      document.getElementById("stabilityValue").textContent =
+        `${document.getElementById("stability").value}%`;
+    }
+
     function submit() {
       const voiceA = document.getElementById("voiceA").value;
       const voiceB = document.getElementById("voiceB").value;
+      const voiceC = document.getElementById("voiceC").value;
       const script = document.getElementById("script").value.trim();
-      if (!script || !voiceA || !voiceB) return;
-      closeWithResult({ cancelled: false, voiceA, voiceB, script });
+      if (!script || !voiceA || !voiceB || !voiceC) return;
+      closeWithResult({
+        cancelled: false,
+        voiceA,
+        voiceB,
+        voiceC,
+        script,
+        stability: stabilityFromSlider(),
+      });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("script").focus();
+      document.getElementById("stability").addEventListener("input", updateStabilityLabel);
+      updateStabilityLabel();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
       });
@@ -34,22 +53,54 @@
   </script>
   <style>
     textarea { min-height: 6em; }
+    body { gap: 0.65em; overflow-y: auto; }
+    .speaker-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5em 0.75em;
+    }
+    .speaker-row label { flex: 1; min-width: 8em; }
+    .script-hint, .tag-hint, .style-hint, .stability-hint { font-size: 0.95em; }
+    .slider-value { min-width: 4.5em; color: var(--c-accent-secondary); }
+    .control-label {
+      min-width: 6.5em;
+      flex-shrink: 0;
+    }
+    .tempo-row .control-label { min-width: 4.5em; }
+    .row-gutter {
+      width: 1.15em;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
-  <p class="hint">Prefix each line with <strong>1:</strong> or <strong>2:</strong> for speaker A or B.</p>
+  <p class="hint script-hint">Prefix each line with <strong>1:</strong>, <strong>2:</strong>, or <strong>3:</strong> for speaker A, B, or C.</p>
 
-  <div class="row">
-    <label for="voiceA">Speaker A voice
+  <div class="speaker-row">
+    <label for="voiceA">Speaker A
       <select id="voiceA">{{VOICE_OPTIONS_A}}</select>
     </label>
-    <label for="voiceB">Speaker B voice
+    <label for="voiceB">Speaker B
       <select id="voiceB">{{VOICE_OPTIONS_B}}</select>
+    </label>
+    <label for="voiceC">Speaker C
+      <select id="voiceC">{{VOICE_OPTIONS_C}}</select>
     </label>
   </div>
 
   <label for="script">Dialogue script</label>
-  <textarea id="script" placeholder="1: [giggling] Knock knock&#10;2: Who is there?&#10;1: It's ElevenLabs!"></textarea>
+  <textarea id="script" placeholder="1: [giggling] Knock knock&#10;2: [curious] Who is there?&#10;3: [whispering] It's a secret!&#10;1: It's ElevenLabs!"></textarea>
+
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Stability</span>
+    <input id="stability" type="range" min="0" max="100" step="5" value="50" />
+    <span id="stabilityValue" class="slider-value">50%</span>
+  </label>
+  <p class="hint stability-hint">Lower stability = more expressive variation; higher = steadier, more consistent delivery.</p>
+
+  <p class="hint tag-hint">Steer performance with <strong>audio tags</strong> in square brackets inside each line — e.g. <strong>[whispering]</strong>, <strong>[laughs]</strong>, <strong>[excited]</strong>, <strong>[pause]</strong>. Tags apply to that speaker's line where you place them.</p>
+  <p class="hint style-hint"><strong>Writing style</strong> also shapes delivery: punctuation, exclamation marks, and brief stage directions (e.g. <em>she said quietly</em>) influence tone and pacing. Keep the full script under ~2,000 characters per request.</p>
 
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>

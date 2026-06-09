@@ -25,7 +25,7 @@ This project uses the **BMad Method** for planning and implementation.
 
 ## Current release
 
-**v0.4.0** — stem separation, voice clone, forced alignment MIDI, pronunciation rules + Extension Host compatibility fixes
+**v0.5.0** — Session voice isolation, SFX/Music modal UX, Live tempo sync, audio-slot guards, UI layout polish
 
 ---
 

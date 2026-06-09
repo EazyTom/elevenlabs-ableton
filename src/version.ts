@@ -2,16 +2,16 @@
  * Extension versioning — bump EXTENSION_VERSION on each release.
  * Feature versions track when individual capabilities were introduced or changed.
  */
-export const EXTENSION_VERSION = "0.4.0";
+export const EXTENSION_VERSION = "0.5.0";
 
 export const FEATURE_VERSIONS = {
   ttsClipSlot: "1.0.0",
   ttsArrangement: "1.0.0",
-  sfx: "1.0.0",
-  music: "1.0.0",
+  sfx: "1.1.0",
+  music: "1.1.0",
   batchTts: "1.0.0",
   voiceChanger: "1.0.0",
-  vocalIsolation: "1.0.0",
+  vocalIsolation: "1.1.0",
   transcribe: "1.0.0",
   simplerTts: "1.0.0",
   simplerSfx: "1.0.0",
@@ -29,15 +29,15 @@ export const FEATURE_VERSIONS = {
 export type FeatureId = keyof typeof FEATURE_VERSIONS;
 
 export const FEATURE_LABELS: Record<FeatureId, string> = {
-  ttsClipSlot: "TTS → Clip Slot",
-  ttsArrangement: "TTS → Arrangement Selection",
+  ttsClipSlot: "Text-to-Speech → Clip Slot",
+  ttsArrangement: "Text-to-Speech → Arrangement Selection",
   sfx: "Sound Effects → Clip",
   music: "Music Generation → Clip",
-  batchTts: "Batch TTS → Session Clip Slots",
+  batchTts: "Batch Text-to-Speech → Session Clip Slots",
   voiceChanger: "Voice Changer (Speech-to-Speech)",
-  vocalIsolation: "Vocal Isolation",
+  vocalIsolation: "Voice Isolation",
   transcribe: "Transcribe (Scribe STT)",
-  simplerTts: "TTS → Simpler Sample",
+  simplerTts: "Text-to-Speech → Simpler Sample",
   simplerSfx: "SFX → Simpler Sample",
   postImportFx: "Post-Import Vocal FX (mixer + device)",
   voicePicker: "Voice Library Picker (voices.search)",

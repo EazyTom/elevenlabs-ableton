@@ -13,10 +13,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { strToU8, zipSync } from "fflate";
 
+import { AudioTrack, MidiTrack } from "@ableton-extensions/sdk";
+
+import { importFilename, parseAudioOutputFormat } from "../src/audio-output-formats.js";
+import { isAudioClipSlot } from "../src/clip-io.js";
 import { parseDialogueScript } from "../src/dialogue.js";
-import { buildMusicPrompt, MUSIC_LOOP_SUFFIX, MUSIC_PROMPT_BANKS, MUSIC_TEMPLATE_STRINGS, randomMusicPrompt } from "../src/music-prompt.js";
+import { buildMusicCompositionPlan, buildMusicPrompt, musicForceInstrumental, MUSIC_LOOP_SUFFIX, MUSIC_PROMPT_BANKS, MUSIC_TEMPLATE_STRINGS, randomMusicPrompt } from "../src/music-prompt.js";
+import { clampMusicLengthMs, clampMusicLengthSec, MUSIC_MAX_LENGTH_SEC, MUSIC_MIN_LENGTH_SEC } from "../src/music-length.js";
 import { clampMusicVariants, MAX_MUSIC_VARIANTS } from "../src/music-variants.js";
 import { buildDrumKitPiecePrompt, DRUM_KIT_PIECES } from "../src/drum-kit.js";
+import { buildSfxApiText, parseNegativePromptTerms } from "../src/prompt-utils.js";
 import { randomSfxPrompt, SFX_LOOP_SUFFIX, SFX_PROMPT_BANKS } from "../src/sfx-prompt.js";
 import { clampSfxVariants, MAX_SFX_VARIANTS } from "../src/sfx-variants.js";
 import {
@@ -108,11 +114,26 @@ async function checkBundle(): Promise<void> {
 }
 
 function checkPureFunctions(): void {
-  const lines = parseDialogueScript("1: Hello\n2: Hi there", "voice-a", "voice-b");
-  if (lines.length !== 2 || lines[0]!.voiceId !== "voice-a") {
+  const lines = parseDialogueScript("1: Hello\n2: Hi there\n3: [excited] Me too", {
+    voiceA: "voice-a",
+    voiceB: "voice-b",
+    voiceC: "voice-c",
+  });
+  if (
+    lines.length !== 3 ||
+    lines[0]!.voiceId !== "voice-a" ||
+    lines[2]!.voiceId !== "voice-c"
+  ) {
     fail("parseDialogueScript", "unexpected parse result");
   }
-  pass("parseDialogueScript", "2 lines parsed");
+  pass("parseDialogueScript", "3-speaker lines parsed");
+
+  const audioSlot = { parent: { constructor: { className: AudioTrack.className } } };
+  const midiSlot = { parent: { constructor: { className: MidiTrack.className } } };
+  if (!isAudioClipSlot(audioSlot as never) || isAudioClipSlot(midiSlot as never)) {
+    fail("isAudioClipSlot", "unexpected track-type detection");
+  }
+  pass("isAudioClipSlot", "audio vs MIDI clip slots distinguished");
 
   const notes = timedWordsToLyricNotes(
     [{ text: "test", start: 0, end: 0.5 }],
@@ -137,13 +158,15 @@ function checkPureFunctions(): void {
   pass("extractZipArchive", "1 entry extracted");
 
   const built = buildMusicPrompt({
-    genres: ["trap", "epic"],
+    genres: ["trap", "epic", "dark"],
     tempoBpm: 140,
-    highEnergy: true,
     prompt: "808 bass",
   });
-  if (!built.includes("trap") || !built.includes("140 BPM") || !built.includes("808 bass")) {
+  if (!built.includes("trap") || !built.includes("140 BPM") || !built.includes("808 bass") || !built.includes("dark")) {
     fail("buildMusicPrompt", `unexpected prompt: ${built}`);
+  }
+  if (!musicForceInstrumental({ genres: ["instrumental"] })) {
+    fail("musicForceInstrumental", "instrumental genre should force instrumental");
   }
   pass("buildMusicPrompt", "genres + tempo merged");
 
@@ -176,6 +199,14 @@ function checkPureFunctions(): void {
   }
   pass("clampMusicVariants", "clamped to 1–10");
 
+  if (clampMusicLengthSec(2) !== MUSIC_MIN_LENGTH_SEC || clampMusicLengthSec(999) !== MUSIC_MAX_LENGTH_SEC) {
+    fail("clampMusicLengthSec", "expected 3–600 second clamp");
+  }
+  if (clampMusicLengthMs(2_000) !== 3_000 || clampMusicLengthMs(999_000) !== 600_000) {
+    fail("clampMusicLengthMs", "expected 3000–600000 ms clamp");
+  }
+  pass("music-length", "API bounds enforced");
+
   const sfxPrompt = randomSfxPrompt({}, () => 0);
   if (!sfxPrompt || sfxPrompt.length < 20) {
     fail("randomSfxPrompt", "prompt too short");
@@ -198,6 +229,39 @@ function checkPureFunctions(): void {
     fail("clampSfxVariants", "max should be 10");
   }
   pass("clampSfxVariants", "clamped to 1–10");
+
+  const negTerms = parseNegativePromptTerms("distortion, vocals");
+  if (negTerms.length !== 2) {
+    fail("parseNegativePromptTerms", "expected two terms");
+  }
+  const sfxText = buildSfxApiText("cinematic whoosh", "distortion, harsh highs");
+  if (!sfxText.includes("Avoid:") || !sfxText.includes("distortion")) {
+    fail("buildSfxApiText", `unexpected text: ${sfxText}`);
+  }
+  pass("buildSfxApiText", "negative terms appended");
+
+  const plan = buildMusicCompositionPlan("trap, dark", ["vocals"], 30_000);
+  const styles = plan.positive_global_styles as string[];
+  const negatives = plan.negative_global_styles as string[];
+  if (!styles.includes("trap") || !negatives.includes("vocals")) {
+    fail("buildMusicCompositionPlan", "plan styles missing");
+  }
+  const instrumentalPlan = buildMusicCompositionPlan("ambient", ["distortion"], 30_000, {
+    forceInstrumental: true,
+  });
+  const instrumentalNegatives = instrumentalPlan.negative_global_styles as string[];
+  if (!instrumentalNegatives.includes("vocals") || !instrumentalNegatives.includes("distortion")) {
+    fail("buildMusicCompositionPlan-instrumental", "instrumental negatives missing");
+  }
+  pass("buildMusicCompositionPlan", "composition plan built");
+
+  if (parseAudioOutputFormat("pcm_44100") !== "pcm_44100") {
+    fail("parseAudioOutputFormat", "pcm not parsed");
+  }
+  if (importFilename("elevenlabs-sfx", "pcm_44100") !== "elevenlabs-sfx.wav") {
+    fail("importFilename", "pcm should use wav extension");
+  }
+  pass("audio-output-formats", "format parsing + filenames");
 
   const kickPrompt = buildDrumKitPiecePrompt("lo-fi trap", DRUM_KIT_PIECES[0]!);
   if (!kickPrompt.includes("lo-fi trap") || !kickPrompt.includes("kick")) {
