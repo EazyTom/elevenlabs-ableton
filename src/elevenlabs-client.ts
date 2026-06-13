@@ -1,6 +1,5 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { createReadStream } from "fs";
-import { readFile } from "fs/promises";
 import path from "path";
 
 import { postJsonBinary, postMultipart, readAudioUpload } from "./multipart-upload.js";
@@ -9,6 +8,7 @@ import {
   type AudioOutputFormat,
 } from "./audio-output-formats.js";
 import { buildMusicCompositionPlan } from "./music-prompt.js";
+import { tryResolveApiKey } from "./api-key.js";
 import {
   clampMusicLengthMs,
 } from "./music-length.js";
@@ -119,29 +119,9 @@ export interface AlignedWord {
 
 export type StemVariationId = "two_stems_v1" | "six_stems_v1";
 
-async function readApiKeyFromDir(dir: string): Promise<string | undefined> {
-  try {
-    const key = (await readFile(path.join(dir, "api-key.txt"), "utf-8")).trim();
-    return key || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function resolveApiKey(storageDirectory: string | undefined): Promise<string> {
-  if (process.env.ELEVENLABS_API_KEY?.trim()) {
-    return process.env.ELEVENLABS_API_KEY.trim();
-  }
-
-  const searchDirs = [
-    storageDirectory,
-    process.env.ELEVENLABS_STORAGE_DIRECTORY?.trim(),
-  ].filter((d): d is string => Boolean(d));
-
-  for (const dir of searchDirs) {
-    const key = await readApiKeyFromDir(dir);
-    if (key) return key;
-  }
+  const key = await tryResolveApiKey(storageDirectory);
+  if (key) return key;
 
   throw new Error(
     "ElevenLabs API key not found. Set ELEVENLABS_API_KEY, ELEVENLABS_STORAGE_DIRECTORY in .env, or pass --storage-directory with api-key.txt.",

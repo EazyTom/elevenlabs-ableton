@@ -1,26 +1,14 @@
-import { DrumChain, DrumRack, Simpler } from "@ableton-extensions/sdk";
+import { ClipSlot, DrumChain, DrumRack, MidiTrack, Simpler } from "@ableton-extensions/sdk";
+import type { Handle } from "@ableton-extensions/sdk";
 
 import type { ExtensionContext } from "./live-selection.js";
-import { DRUM_RACK_START_NOTE } from "./drum-kit.js";
+import { resolveHandle } from "./live-selection.js";
+import { isMidiTrack } from "./sdk-objects.js";
 
-export interface DrumPadSummary {
-  midiNote: number;
-}
+export { DRUM_RACK_START_NOTE } from "./drum-kit.js";
 
-/** Drum rack chains that contain a Simpler, sorted by MIDI note. */
-export function listPadsWithSimpler(drumRack: DrumRack<"1.0.0">): DrumPadSummary[] {
-  const pads: DrumPadSummary[] = [];
-  for (const chain of drumRack.chains) {
-    if (!(chain instanceof DrumChain)) continue;
-    for (const device of chain.devices) {
-      if (device instanceof Simpler) {
-        pads.push({ midiNote: chain.receivingNote });
-        break;
-      }
-    }
-  }
-  return pads.sort((a, b) => a.midiNote - b.midiNote);
-}
+/** Built-in Live device name for an empty Drum Rack (Browser → Drums → Drum Rack). */
+export const EMPTY_DRUM_RACK_DEVICE = "Drum Rack";
 
 export function findDrumChainByNote(
   drumRack: DrumRack<"1.0.0">,
@@ -34,9 +22,7 @@ export function findDrumChainByNote(
   return null;
 }
 
-/**
- * Find the Simpler device on a drum rack pad (by MIDI note number).
- */
+/** Find the Simpler device on a drum rack pad (by MIDI note number). */
 export function findSimplerOnPad(drumRack: DrumRack<"1.0.0">, midiNote: number): Simpler<"1.0.0"> | null {
   const chain = findDrumChainByNote(drumRack, midiNote);
   if (!chain) return null;
@@ -49,9 +35,7 @@ export function findSimplerOnPad(drumRack: DrumRack<"1.0.0">, midiNote: number):
   return null;
 }
 
-/**
- * Ensure a drum pad has a Simpler — creates a chain + inserts Simpler when missing.
- */
+/** Ensure a drum pad has a Simpler — creates a chain + inserts Simpler when missing. */
 export async function ensureSimplerOnPad(
   context: ExtensionContext,
   drumRack: DrumRack<"1.0.0">,
@@ -88,9 +72,74 @@ export function assertPadRange(startNote: number, count: number): void {
   }
   if (startNote + count - 1 > 127) {
     throw new Error(
-      `Pads C0+ need ${count} consecutive notes but exceed MIDI 127 (start ${startNote}).`,
+      `${count} consecutive pads from MIDI ${startNote} would exceed MIDI 127.`,
     );
   }
 }
 
-export { DRUM_RACK_START_NOTE };
+/** True when the pad already has a loaded Simpler sample. */
+export function isDrumPadOccupied(drumRack: DrumRack<"1.0.0">, midiNote: number): boolean {
+  const simpler = findSimplerOnPad(drumRack, midiNote);
+  return simpler?.sample != null;
+}
+
+/** Find the first Drum Rack device on a MIDI track's device chain. */
+export function findDrumRackOnTrack(track: { devices: readonly unknown[] }): DrumRack<"1.0.0"> | null {
+  for (const device of track.devices) {
+    if (device instanceof DrumRack) {
+      return device;
+    }
+  }
+  return null;
+}
+
+/** Resolve Drum Rack from a Session View MIDI clip slot (track must host a Drum Rack). */
+export function resolveDrumRackFromClipSlot(
+  context: ExtensionContext,
+  handle: Handle,
+): DrumRack<"1.0.0"> | null {
+  const slot = resolveHandle(context, handle, ClipSlot);
+  const parent = slot.parent;
+  if (!parent || !isMidiTrack(parent)) {
+    return null;
+  }
+  return findDrumRackOnTrack(parent);
+}
+
+/** Insert Ableton's built-in empty Drum Rack at the start of a MIDI track's device chain. */
+export async function insertEmptyDrumRackOnTrack(
+  context: ExtensionContext,
+  track: MidiTrack<"1.0.0">,
+): Promise<DrumRack<"1.0.0">> {
+  return context.withinTransaction(async () => {
+    const device = await track.insertDevice(EMPTY_DRUM_RACK_DEVICE, 0);
+    if (!(device instanceof DrumRack)) {
+      throw new Error("Could not insert Drum Rack on this track.");
+    }
+    return device;
+  });
+}
+
+/**
+ * Resolve Drum Rack from a Session View MIDI clip slot.
+ * When the track has no instruments, inserts an empty Drum Rack automatically.
+ */
+export async function ensureDrumRackFromClipSlot(
+  context: ExtensionContext,
+  handle: Handle,
+): Promise<DrumRack<"1.0.0"> | null> {
+  const slot = resolveHandle(context, handle, ClipSlot);
+  const parent = slot.parent;
+  if (!parent || !isMidiTrack(parent)) {
+    return null;
+  }
+
+  const existing = findDrumRackOnTrack(parent);
+  if (existing) return existing;
+
+  if (parent.devices.length > 0) {
+    return null;
+  }
+
+  return insertEmptyDrumRackOnTrack(context, parent);
+}

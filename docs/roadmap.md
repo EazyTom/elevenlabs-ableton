@@ -9,6 +9,7 @@
 | **0.3.0** | Voice picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules, refactor |
 | **0.5.0** | Session voice isolation, modal UX/tempo sync, audio-slot guards, UI layout |
+| **0.6.0** | Drum Rack SFX pad-slot modal, API key onboarding & management, MIDI clip slot drum entry |
 
 ---
 
@@ -48,7 +49,7 @@
 | `AudioClip` | Transcribe, align, clone, stems |
 | `AudioTrack` | Pronunciation rules |
 | `Simpler` | TTS / SFX sample replace |
-| `DrumRack` | Pad SFX |
+| `DrumRack` / MIDI `ClipSlot` | Drum Rack SFX (7 pad slots) |
 | `MidiTrack` | Created for lyric markers (not a context menu scope) |
 
 **Not yet used:** `Song.cuePoints`, `MidiTrack`/`MidiClip` direct menus, `DeviceParameter` automation, `WarpMode` post-import, `Scene` scope.

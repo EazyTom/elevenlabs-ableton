@@ -2,7 +2,7 @@
  * Extension versioning — bump EXTENSION_VERSION on each release.
  * Feature versions track when individual capabilities were introduced or changed.
  */
-export const EXTENSION_VERSION = "0.5.0";
+export const EXTENSION_VERSION = "0.6.0";
 
 export const FEATURE_VERSIONS = {
   ttsClipSlot: "1.0.0",
@@ -18,7 +18,7 @@ export const FEATURE_VERSIONS = {
   postImportFx: "1.0.0",
   voicePicker: "1.0.0",
   dialogue: "1.0.0",
-  drumRackSfx: "1.0.0",
+  drumRackSfx: "1.1.0",
   transcribeToMidi: "1.0.0",
   stemSeparation: "1.0.0",
   voiceClone: "1.0.0",
@@ -42,7 +42,7 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   postImportFx: "Post-Import Vocal FX (mixer + device)",
   voicePicker: "Voice Library Picker (voices.search)",
   dialogue: "Text-to-Dialogue → Clip",
-  drumRackSfx: "Drum Rack SFX → Pad Sample",
+  drumRackSfx: "Drum Rack SFX → Pad Samples",
   transcribeToMidi: "Transcribe → MIDI Lyric Markers",
   stemSeparation: "Music Stem Separation → Multi-Track",
   voiceClone: "Instant Voice Clone from Live Audio",

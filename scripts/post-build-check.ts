@@ -9,19 +9,39 @@
  * Requires ELEVENLABS_API_KEY or --storage-directory with api-key.txt for API tests.
  */
 import { readFile } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { strToU8, zipSync } from "fflate";
 
-import { AudioTrack, MidiTrack } from "@ableton-extensions/sdk";
+import { AudioTrack, DrumRack, MidiTrack } from "@ableton-extensions/sdk";
 
 import { importFilename, parseAudioOutputFormat } from "../src/audio-output-formats.js";
 import { isAudioClipSlot } from "../src/clip-io.js";
-import { parseDialogueScript } from "../src/dialogue.js";
+import { parseDialogueScript, validateDialogueInput } from "../src/dialogue.js";
 import { buildMusicCompositionPlan, buildMusicPrompt, musicForceInstrumental, MUSIC_LOOP_SUFFIX, MUSIC_PROMPT_BANKS, MUSIC_TEMPLATE_STRINGS, randomMusicPrompt } from "../src/music-prompt.js";
 import { clampMusicLengthMs, clampMusicLengthSec, MUSIC_MAX_LENGTH_SEC, MUSIC_MIN_LENGTH_SEC } from "../src/music-length.js";
 import { clampMusicVariants, MAX_MUSIC_VARIANTS } from "../src/music-variants.js";
-import { buildDrumKitPiecePrompt, DRUM_KIT_PIECES } from "../src/drum-kit.js";
+import {
+  DEFAULT_KIT_TYPE_BY_PAD,
+  DRUM_KIT_START_NOTE_OPTIONS,
+  DRUM_PAD_SLOT_COUNT,
+  DRUM_RACK_START_NOTE,
+  DRUM_TYPES,
+  DRUM_TYPE_STYLE_BANKS,
+  drumPadMidiNote,
+  noteName,
+  resolveDrumPadPrompt,
+} from "../src/drum-kit.js";
+import { EMPTY_DRUM_RACK_DEVICE, findDrumRackOnTrack } from "../src/drum-io.js";
+import { isMidiTrack } from "../src/sdk-objects.js";
+import {
+  apiKeyFilePath,
+  clearApiKeyFile,
+  saveApiKeyToStorage,
+} from "../src/api-key.js";
+import { getDrumKitSettings, saveDrumKitSettings } from "../src/storage.js";
 import { buildSfxApiText, parseNegativePromptTerms } from "../src/prompt-utils.js";
 import { randomSfxPrompt, SFX_LOOP_SUFFIX, SFX_PROMPT_BANKS } from "../src/sfx-prompt.js";
 import { clampSfxVariants, MAX_SFX_VARIANTS } from "../src/sfx-variants.js";
@@ -114,7 +134,7 @@ async function checkBundle(): Promise<void> {
 }
 
 function checkPureFunctions(): void {
-  const lines = parseDialogueScript("1: Hello\n2: Hi there\n3: [excited] Me too", {
+  const lines = parseDialogueScript("A: Hello\nB: Hi there\nC: [excited] Me too", {
     voiceA: "voice-a",
     voiceB: "voice-b",
     voiceC: "voice-c",
@@ -126,12 +146,33 @@ function checkPureFunctions(): void {
   ) {
     fail("parseDialogueScript", "unexpected parse result");
   }
-  pass("parseDialogueScript", "3-speaker lines parsed");
+  pass("parseDialogueScript", "3-speaker A/B/C lines parsed");
+
+  const legacy = parseDialogueScript("1: One\n2: Two", {
+    voiceA: "voice-a",
+    voiceB: "voice-b",
+  });
+  if (legacy.length !== 2) {
+    fail("parseDialogueScript", "legacy 1:/2: prefixes failed");
+  }
+  pass("parseDialogueScript", "legacy numeric prefixes still accepted");
+
+  const validation = validateDialogueInput("A: Hi\nB: There", {
+    voiceA: "a",
+    voiceB: "b",
+  });
+  if (validation !== null) {
+    fail("validateDialogueInput", "two-speaker script should validate without voice C");
+  }
+  pass("validateDialogueInput", "Speaker C voice optional for A/B-only scripts");
 
   const audioSlot = { parent: { constructor: { className: AudioTrack.className } } };
   const midiSlot = { parent: { constructor: { className: MidiTrack.className } } };
   if (!isAudioClipSlot(audioSlot as never) || isAudioClipSlot(midiSlot as never)) {
     fail("isAudioClipSlot", "unexpected track-type detection");
+  }
+  if (!isMidiTrack(midiSlot.parent) || isMidiTrack(audioSlot.parent)) {
+    fail("isMidiTrack", "unexpected MIDI track detection");
   }
   pass("isAudioClipSlot", "audio vs MIDI clip slots distinguished");
 
@@ -263,16 +304,137 @@ function checkPureFunctions(): void {
   }
   pass("audio-output-formats", "format parsing + filenames");
 
-  const kickPrompt = buildDrumKitPiecePrompt("lo-fi trap", DRUM_KIT_PIECES[0]!);
-  if (!kickPrompt.includes("lo-fi trap") || !kickPrompt.includes("kick")) {
-    fail("buildDrumKitPiecePrompt", `unexpected kit prompt: ${kickPrompt}`);
+  const kickType = DRUM_TYPES[0]!;
+  const resolved = resolveDrumPadPrompt("lo-fi trap", kickType.defaultCharacteristics, "kick");
+  if (!resolved.includes("lo-fi trap") || !resolved.includes("transient")) {
+    fail("resolveDrumPadPrompt", `unexpected: ${resolved}`);
   }
-  pass("buildDrumKitPiecePrompt", "base + kick suffix merged");
+  pass("resolveDrumPadPrompt", "style + characteristics merged");
 
-  if (DRUM_KIT_PIECES.length !== 7) {
-    fail("DRUM_KIT_PIECES", "expected 7 kit pieces");
+  const fallback = resolveDrumPadPrompt("", kickType.defaultCharacteristics, "kick");
+  if (!fallback.includes("kick drum")) {
+    fail("resolveDrumPadPrompt-fallback", `unexpected: ${fallback}`);
   }
-  pass("DRUM_KIT_PIECES", "7 kit pieces defined");
+  pass("resolveDrumPadPrompt-fallback", "empty style uses characteristics only");
+
+  const kickKeyPrompt = resolveDrumPadPrompt("Punchy 808", kickType.defaultCharacteristics, "kick", "F");
+  if (!kickKeyPrompt.includes("tuned to F")) {
+    fail("resolveDrumPadPrompt-kickKey", `unexpected: ${kickKeyPrompt}`);
+  }
+  pass("resolveDrumPadPrompt-kickKey", "kick key appended");
+
+  const snareKeyPrompt = resolveDrumPadPrompt("Tight studio", DRUM_TYPES[1]!.defaultCharacteristics, "snare", "G");
+  if (!snareKeyPrompt.includes("tuned to G")) {
+    fail("resolveDrumPadPrompt-snareKey", `unexpected: ${snareKeyPrompt}`);
+  }
+  pass("resolveDrumPadPrompt-snareKey", "snare key appended");
+
+  for (const drumType of DRUM_TYPES) {
+    const bank = DRUM_TYPE_STYLE_BANKS[drumType.id];
+    if (!bank || bank.length < 8) {
+      fail("DRUM_TYPE_STYLE_BANKS", `${drumType.id} needs a phrase bank`);
+    }
+    if (!drumType.defaultCharacteristics.includes("transient")) {
+      fail("DRUM_TYPES-characteristics", `${drumType.id} missing transient guidance`);
+    }
+  }
+  pass("DRUM_TYPE_STYLE_BANKS", "each drum type has style phrases + characteristics");
+
+  if (DEFAULT_KIT_TYPE_BY_PAD.length !== DRUM_PAD_SLOT_COUNT) {
+    fail("DEFAULT_KIT_TYPE_BY_PAD", "expected 7 default kit types");
+  }
+  pass("DEFAULT_KIT_TYPE_BY_PAD", "build-kit preset mapping length 7");
+
+  const mockDrumRack = Object.create(DrumRack.prototype) as DrumRack<"1.0.0">;
+  const found = findDrumRackOnTrack({ devices: [mockDrumRack] });
+  if (found !== mockDrumRack) {
+    fail("findDrumRackOnTrack", "should return Drum Rack device");
+  }
+  if (findDrumRackOnTrack({ devices: [] }) !== null) {
+    fail("findDrumRackOnTrack-empty", "empty chain should return null");
+  }
+  pass("findDrumRackOnTrack", "locates Drum Rack on track devices");
+
+  if (EMPTY_DRUM_RACK_DEVICE !== "Drum Rack") {
+    fail("EMPTY_DRUM_RACK_DEVICE", `expected "Drum Rack", got ${EMPTY_DRUM_RACK_DEVICE}`);
+  }
+  pass("EMPTY_DRUM_RACK_DEVICE", "empty rack insert device name");
+
+  if (DRUM_RACK_START_NOTE !== 36) {
+    fail("DRUM_RACK_START_NOTE", `expected 36, got ${DRUM_RACK_START_NOTE}`);
+  }
+  pass("DRUM_RACK_START_NOTE", "default start is C1 (36)");
+
+  if (noteName(36) !== "C1") {
+    fail("noteName", `expected C1, got ${noteName(36)}`);
+  }
+  pass("noteName", "Live convention C1 at 36");
+
+  const expectedStartNotes = [
+    [0, "C-2"],
+    [12, "C-1"],
+    [24, "C0"],
+    [36, "C1"],
+    [48, "C2"],
+    [60, "C3"],
+  ] as const;
+  if (DRUM_KIT_START_NOTE_OPTIONS.length !== expectedStartNotes.length) {
+    fail("DRUM_KIT_START_NOTE_OPTIONS", "expected 6 start pad options");
+  }
+  for (const [i, [midi, label]] of expectedStartNotes.entries()) {
+    const opt = DRUM_KIT_START_NOTE_OPTIONS[i];
+    if (!opt || opt.midiNote !== midi || opt.label !== label) {
+      fail("DRUM_KIT_START_NOTE_OPTIONS", `option ${i} expected ${label} (${midi})`);
+    }
+  }
+  pass("DRUM_KIT_START_NOTE_OPTIONS", "C-2 through C3, default C1");
+
+  if (drumPadMidiNote(0, 36) !== 36 || drumPadMidiNote(3, 36) !== 39) {
+    fail("drumPadMidiNote", "consecutive layout wrong");
+  }
+  pass("drumPadMidiNote", "consecutive pad notes from start");
+
+  if (DRUM_TYPES.length !== 8) {
+    fail("DRUM_TYPES", "expected 8 drum types");
+  }
+  for (const drumType of DRUM_TYPES) {
+    if (drumType.defaultDurationSeconds * 2 !== Math.round(drumType.defaultDurationSeconds * 2)) {
+      fail("DRUM_TYPES-duration", `${drumType.id} duration not on 0.5s grid`);
+    }
+  }
+  pass("DRUM_TYPES", "8 drum types with valid durations");
+}
+
+async function checkAsyncStorage(): Promise<void> {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "el-kit-"));
+  try {
+    await saveApiKeyToStorage(tempDir, "  sk_test_key  ");
+    const keyPath = apiKeyFilePath(tempDir);
+    const saved = (await readFile(keyPath, "utf-8")).trim();
+    if (saved !== "sk_test_key") {
+      fail("saveApiKeyToStorage", `unexpected saved key: ${saved}`);
+    }
+    await clearApiKeyFile(tempDir);
+    try {
+      await readFile(keyPath, "utf-8");
+      fail("clearApiKeyFile", "file should be removed");
+    } catch {
+      pass("api-key-storage", "save + clear api-key.txt");
+    }
+
+    await saveDrumKitSettings(tempDir, {
+      startMidiNote: 36,
+      overwriteOccupied: false,
+      pads: [{ padIndex: 0, type: "kick", stylePhrase: "test", durationSeconds: 1 }],
+    });
+    const loaded = await getDrumKitSettings(tempDir);
+    if (!loaded?.pads[0]?.stylePhrase || loaded.pads[0]?.type !== "kick") {
+      fail("drumKitSettings", "round-trip failed");
+    }
+    pass("drumKitSettings", "persisted kit settings round-trip");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function checkApiSmoke(): Promise<void> {
@@ -321,6 +483,7 @@ async function main(): Promise<void> {
 
   console.log("\nUnit checks:");
   checkPureFunctions();
+  await checkAsyncStorage();
 
   console.log("\nAPI smoke tests:");
   await checkApiSmoke();

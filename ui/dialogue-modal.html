@@ -26,17 +26,39 @@
         `${document.getElementById("stability").value}%`;
     }
 
+    function setError(message) {
+      const el = document.getElementById("error");
+      el.textContent = message || "";
+      el.hidden = !message;
+    }
+
+    function scriptNeedsSpeakerC(script) {
+      return /^(?:C|c|3):\s*.+/m.test(script);
+    }
+
     function submit() {
+      setError("");
       const voiceA = document.getElementById("voiceA").value;
       const voiceB = document.getElementById("voiceB").value;
       const voiceC = document.getElementById("voiceC").value;
       const script = document.getElementById("script").value.trim();
-      if (!script || !voiceA || !voiceB || !voiceC) return;
+      if (!script) {
+        setError("Enter a dialogue script.");
+        return;
+      }
+      if (!voiceA || !voiceB) {
+        setError("Select voices for Speaker A and Speaker B.");
+        return;
+      }
+      if (scriptNeedsSpeakerC(script) && !voiceC) {
+        setError("Select a voice for Speaker C — your script includes C: lines.");
+        return;
+      }
       closeWithResult({
         cancelled: false,
         voiceA,
         voiceB,
-        voiceC,
+        voiceC: voiceC || undefined,
         script,
         stability: stabilityFromSlider(),
       });
@@ -74,7 +96,8 @@
   </style>
 </head>
 <body>
-  <p class="hint script-hint">Prefix each line with <strong>1:</strong>, <strong>2:</strong>, or <strong>3:</strong> for speaker A, B, or C.</p>
+  <p class="hint script-hint">Prefix each line with <strong>A:</strong>, <strong>B:</strong>, or <strong>C:</strong> for speaker A, B, or C. Speaker C is only required when your script includes <strong>C:</strong> lines.</p>
+  <p id="error" class="error" hidden></p>
 
   <div class="speaker-row">
     <label for="voiceA">Speaker A
@@ -83,13 +106,13 @@
     <label for="voiceB">Speaker B
       <select id="voiceB">{{VOICE_OPTIONS_B}}</select>
     </label>
-    <label for="voiceC">Speaker C
+    <label for="voiceC">Speaker C (optional)
       <select id="voiceC">{{VOICE_OPTIONS_C}}</select>
     </label>
   </div>
 
   <label for="script">Dialogue script</label>
-  <textarea id="script" placeholder="1: [giggling] Knock knock&#10;2: [curious] Who is there?&#10;3: [whispering] It's a secret!&#10;1: It's ElevenLabs!"></textarea>
+  <textarea id="script" placeholder="A: [giggling] Knock knock&#10;B: [curious] Who is there?&#10;C: [whispering] It's a secret!&#10;A: It's ElevenLabs!"></textarea>
 
   <label class="tempo-row">
     <span class="row-gutter" aria-hidden="true"></span>

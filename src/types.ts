@@ -66,23 +66,35 @@ export interface DialogueModalResult {
   stability?: number;
 }
 
+export interface DrumPadConfig {
+  padIndex: number;
+  enabled: boolean;
+  type: string;
+  stylePhrase: string;
+  characteristics: string;
+  durationSeconds: number;
+  autoDuration?: boolean;
+}
+
 export interface DrumRackSfxModalResult {
   cancelled?: boolean;
-  midiNote?: number;
-  text?: string;
-  durationSeconds?: number;
-  autoDuration?: boolean;
   promptInfluence?: number;
-  negativePrompt?: string;
   outputFormat?: string;
-  loop?: boolean;
   modelId?: "eleven_text_to_sound_v1" | "eleven_text_to_sound_v2";
-  variants?: number;
-  autoLoadPads?: boolean;
-  /** Generate kick, snare, hats, rimshot, clap, and 808 across C0+. */
-  buildDrumKit?: boolean;
-  /** First pad MIDI note for auto-load / kit (default 0 = C0). */
+  /** First pad MIDI note (default 36 = C1). */
   startMidiNote?: number;
+  pads?: DrumPadConfig[];
+  overwriteOccupied?: boolean;
+  /** Musical key for kick pitch character (e.g. "F", "C#"). */
+  kickKey?: string;
+  /** Musical key for snare pitch character (e.g. "F", "C#"). */
+  snareKey?: string;
+}
+
+export interface ApiKeyModalResult {
+  cancelled?: boolean;
+  apiKey?: string;
+  clearKey?: boolean;
 }
 
 export interface CloneVoiceModalResult {

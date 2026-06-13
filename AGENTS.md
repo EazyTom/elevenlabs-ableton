@@ -25,7 +25,7 @@ This project uses the **BMad Method** for planning and implementation.
 
 ## Current release
 
-**v0.5.0** — Session voice isolation, SFX/Music modal UX, Live tempo sync, audio-slot guards, UI layout polish
+**v0.6.0** — Drum Rack SFX pad-slot refactor, API key onboarding & management
 
 ---
 
@@ -82,10 +82,193 @@ Bundle size ~8 MB is expected (ElevenLabs SDK + `formdata-polyfill`). Do not “
 elevenlabs-client.ts (API) → pipelines.ts (orchestration) → extension.ts (command + menu) → ui/*.html (modal)
 ```
 
-- Long operations: `withElevenLabsProgress()` in `pipelines.ts` (shows errors via `formatApiError` + `showError`)
+- Long operations: `withElevenLabsProgress()` in `pipelines.ts` — resolves API key **before** opening the progress dialog via `resolveApiKeyWithPrompt()`; shows errors via `formatApiError` + `showError`
 - Arrangement audio outbound: `renderPreFxAudio(track, start, end)` — prefer over raw `clip.filePath` when FX/warp matter
 - Inbound audio: temp file → `importIntoProject` → `createAudioClip` / `replaceSample`
-- Modals: inject branding via `ui-branding.ts` (`injectBranding()`); logo **140×35 px**
+- Modals: inject branding via `ui-branding.ts` (`prepareModalHtml()`); logo **140×35 px**
+
+---
+
+## Modal UI windows (Extension Host webview)
+
+Modals are **HTML files** in `ui/` loaded as data URLs by the Ableton Extension Host webview. They are **not** React/Vue — plain HTML + inline `<script>` + optional page-local `<style>`. TypeScript in `src/ui.ts` imports them as strings (`import x from "../ui/foo-modal.html"`) via `src/html.d.ts`.
+
+### How a modal opens and returns data
+
+1. **Prompt function** in `src/ui.ts` (e.g. `promptSfx`, `promptDrumRackSfx`) prepares HTML, calls `showModal<T>()`.
+2. **`showModal`** wraps HTML with `prepareModalHtml(html, subtitle)` from `ui-branding.ts` (theme CSS, `modal-base.css`, logo header), then `context.ui.showModalDialog(dataUrl, width, height + MODAL_HEADER_EXTRA_HEIGHT)`.
+3. **Webview JS** calls `closeWithResult({ ... })` → posts `{ method: "close_and_send", params: [JSON.stringify(result)] }` via `webkit.messageHandlers.live` or `chrome.webview`.
+4. **`parseJson<T>()`** in `ui.ts` parses the returned string; `{ cancelled: true }` → prompt returns `null`.
+
+**Keyboard:** most modals bind `Escape` → cancel, `Ctrl/Cmd+Enter` → submit.
+
+**Sizing:** pass body content height to `showModal`; header height is added automatically. Tall modals (Drum Rack SFX) use ~520×920. Scroll via `overflow-y: auto` on `body` when needed.
+
+### Modal inventory
+
+| HTML | Prompt / entry | Subtitle | Notes |
+|------|----------------|----------|-------|
+| `tts-modal.html` | `promptTts` | Text-to-Speech | `{{VOICE_OPTIONS}}` injection |
+| `sfx-modal.html` | `promptSfx` | Generate Sound Effects | `{{SFX_PROMPT_RANDOMIZER}}`; `normalizeSfxModalResult` |
+| `music-modal.html` | `promptMusic` | Generate Music | `{{MUSIC_PROMPT_RANDOMIZER}}`, `{{LIVE_TEMPO}}`; reads Live tempo |
+| `drum-rack-sfx-modal.html` | `promptDrumRackSfx` | Drum Rack SFX | **7 pad slots** — see below |
+| `api-key-modal.html` | `promptApiKey` / `resolveApiKeyWithPrompt` | ElevenLabs API Key | Show/hide key; manage mode |
+| `dialogue-modal.html` | `promptDialogue` | Text to dialogue | Three voice dropdowns |
+| `sfx-variant-picker-modal.html` | `promptSfxVariantPick` | Pick variant | Radio list after multi-gen SFX/Music |
+| `voice-modal.html` | `promptVoice` | Voice selection | |
+| `clone-voice-modal.html` | `promptCloneVoice` | Clone voice | |
+| `align-lyrics-modal.html` | `promptAlignLyrics` | Align lyrics | |
+| `pronunciation-modal.html` | `promptPronunciationRule` | | |
+| `stem-separation-modal.html` | `promptStemSeparation` | | |
+| `transcript-modal.html` | `showTranscript` | Transcript | Read-only display |
+| `result-modal.html` | `showResult` | | Info dialog, no JSON return |
+
+### Two HTML preparation patterns
+
+**A — Static + small replace** (SFX, Music, TTS voices):
+
+```typescript
+template.replace(/\{\{VOICE_OPTIONS\}\}/g, buildVoiceOptionsHtml(voices))
+```
+
+Randomizer scripts are built in TS (`buildSfxPromptRandomizerScript()`, `buildMusicPromptRandomizerScript()`) and injected as `<script>` blocks.
+
+**B — Dynamic row builder in TS** (Drum Rack SFX):
+
+- `buildDrumPadRowsHtml(persisted)` generates all 7 pad rows server-side (escape user text with `escapeHtml()`).
+- `buildDrumPadRandomizerScript()` from `drum-kit.ts` injects `DRUM_TYPES`, style banks, characteristics map, and webview helpers (`randomizePadPhrase`, `applyTypeCharacteristics`).
+- Placeholders in `drum-rack-sfx-modal.html`: `{{DRUM_PAD_RANDOMIZER}}`, `{{DRUM_PAD_ROWS}}`, `{{START_NOTE_OPTIONS}}`, `{{KICK_KEY_OPTIONS}}`, `{{OVERWRITE_CHECKED}}`.
+
+Prefer **pattern B** when the modal has repeating indexed rows (pads, variants). Keep row IDs stable: `padEnabled_0`, `padType_0`, `padPhrase_0`, etc.
+
+### Styling modals
+
+- **Global layout/components:** `ui/modal-base.css` — flex column body, `.checkbox`, `.tempo-row`, `.buttons`, `.error`, range sliders.
+- **Colors/fonts:** only via CSS variables from `src/ui-theme.ts` (`--c-bg`, `--c-accent`, …). `ui-branding.ts` injects `:root { … }`.
+- **Modal-specific layout:** short `<style>` block at bottom of the HTML file (Drum Rack uses `.pad-row`, `.pad-duration-row`, compact headers).
+- **Half-width selects:** `.select-row select` or `.stack-column select` in branding shell (SFX/Music Model+Quality rows).
+- Do **not** hardcode hex colors in HTML.
+
+### Normalization (TS side)
+
+Modal JSON is raw user input. Always normalize in `ui.ts` before returning to pipelines:
+
+| Modal | Normalizer | Key defaults |
+|-------|------------|--------------|
+| SFX | `normalizeSfxModalResult` | `autoDuration: true`, clamp variants 1–10 |
+| Music | `normalizeMusicModalResult` | tempo, genres, length ms |
+| Drum Rack | `normalizeDrumRackSfxModalResult` + `normalizeDrumPads` | per-pad duration on 0.5s grid, `autoDuration` default true |
+
+Types live in `src/types.ts`. Pipeline reads normalized result only.
+
+---
+
+## Drum Rack SFX (v0.6.0 — pad-slot model)
+
+**Menu (consistent naming):** `Generate Drum Rack SFX (ElevenLabs)` on `DrumRack` and MIDI `ClipSlot` (via `resolveDrumRackFromClipSlot` in `drum-io.ts`).
+
+**Feature version:** `drumRackSfx: "1.1.0"` in `FEATURE_VERSIONS`.
+
+### Architecture (no legacy modes)
+
+v0.6.0 **replaced** the old three-mode modal (single pad + auto-load variants + build kit with fixed piece rows). There is now **one flow**: loop enabled pads in `pipelineDrumRackSfx`.
+
+```
+extension.ts → promptDrumRackSfx → pipelineDrumRackSfx → generateSfx per pad → ensureSimplerOnPad → importBytesToSimpler
+```
+
+### Data model — `src/drum-kit.ts`
+
+| Export | Purpose |
+|--------|---------|
+| `DRUM_TYPES` | 8 selectable types: kick, snare, openHat, closedHat, rimshot, perc, clap, other |
+| `DRUM_TYPE_STYLE_BANKS` | Per-type random phrase lists (16 phrases each) |
+| `defaultCharacteristicsForType()` | One-shot SFX traits (includes “minimal silence before transient”) |
+| `DEFAULT_KIT_TYPE_BY_PAD` | 7 types for “Build entire kit” preset |
+| `DRUM_PAD_SLOT_COUNT` | `7` |
+| `resolveDrumPadPrompt(style, characteristics, typeId, kickKey?)` | `"style, characteristics"` + optional `tuned to {key}` for kick |
+| `drumPadMidiNote(padIndex, startNote)` | Consecutive MIDI note mapping |
+| `buildDrumPadRandomizerScript()` | Injected into modal webview |
+
+**Prompt assembly:** user style phrase + editable characteristics (suffix baked into characteristics field, not shown as separate locked line). Kick key is global, applied only when pad `type === "kick"`.
+
+### Modal behavior (`ui/drum-rack-sfx-modal.html`)
+
+- **Default:** only Pad 1 enabled (`buildDrumPadRowsHtml`: `enabled ?? i === 0`).
+- **Build entire drum kit:** enables all 7, sets types from `DEFAULT_KIT_TYPE_BY_PAD`, calls `randomizePadPhrase(i)` each.
+- **Type change:** `applyTypeCharacteristics(padIndex)` refills characteristics textarea from injected map.
+- **Duration slider:** `min=1 max=60 step=1` → seconds = value/2 (0.5s grid). Auto checkbox disables slider, shows “Auto”.
+- **Submit:** `collectPads()` → `{ pads, startMidiNote, kickKey, overwriteOccupied, modelId, outputFormat, promptInfluence }`.
+
+### Persistence — `storage.ts` / `elevenlabs-config.json`
+
+On successful generate, `promptDrumRackSfx` saves via `saveDrumKitSettings`:
+
+- **Saved:** padIndex, type, stylePhrase, durationSeconds, enabled, autoDuration, startMidiNote, overwriteOccupied, kickKey
+- **Not saved:** characteristics (re-derived from type default on open and on type-change in webview)
+- **Migration:** `normalizeStoredDrumKit()` accepts legacy `id` / `promptPrefix` fields from pre-v0.6 configs
+
+### Pipeline — `pipelineDrumRackSfx`
+
+For each **enabled** pad in `modal.pads`:
+
+1. `midiNote = startNote + padIndex`
+2. Skip if occupied and `!overwriteOccupied` (track in `skipped[]`, `showResult` summary)
+3. `resolveDrumPadPrompt` → `generateSfx` with per-pad `autoDuration` / `durationSeconds`
+4. `loadSfxToDrumPad` → creates chain + Simpler if missing
+
+**Removed code (do not reintroduce):** `listPadsWithSimpler`, GM map (`useGmMap`), `generateDrumRackVariants`, auto-load variants, single-pad Simpler requirement.
+
+### Tests
+
+`scripts/post-build-check.ts`: `resolveDrumPadPrompt`, `DRUM_TYPE_STYLE_BANKS`, `DEFAULT_KIT_TYPE_BY_PAD`, `drumPadMidiNote`, `findDrumRackOnTrack`, storage round-trip.
+
+Spec: [docs/v0.6.0-features.md](docs/v0.6.0-features.md).
+
+---
+
+## API key modal (v0.6.0)
+
+**Files:** `ui/api-key-modal.html`, `src/api-key.ts`, `prepareApiKeyModalHtml` / `promptApiKey` / `resolveApiKeyWithPrompt` in `ui.ts`.
+
+| Entry | Behavior |
+|-------|----------|
+| `resolveApiKeyWithPrompt` | Called from `withElevenLabsProgress` before progress UI; opens modal if no env/file key |
+| `promptManageApiKey` | Drum Rack / Audio Track menu; manage mode with Show/Hide, Remove |
+| `readApiKeyFromStorageFile` | Loads full key for Show in manage modal (`{{EXISTING_KEY_SCRIPT}}` on DOMContentLoaded) |
+
+**Resolution order:** `ELEVENLABS_API_KEY` env → `{storageDirectory}/api-key.txt`.
+
+**Modal result type:** `ApiKeyModalResult` — `{ apiKey }`, `{ clearKey: true }`, or `{ cancelled: true }`.
+
+**Validation:** `validateApiKey()` on save; unchanged key in manage mode → “API key unchanged” without rewrite.
+
+**Critical:** never resolve API key inside `withinProgressDialog` — always before, so the user can paste a key without dismissing progress.
+
+---
+
+## Modal work checklist (agents)
+
+1. Add or edit `ui/your-modal.html` — use `closeWithResult`, `setError`, theme variables only.
+2. Add result interface to `src/types.ts`.
+3. Add `promptYourFeature()` in `src/ui.ts` — prepare HTML, `showModal`, normalize, validate.
+4. Wire command in `src/extension.ts`; pipeline in `pipelines.ts` via `withElevenLabsProgress`.
+5. If injecting dynamic HTML, use `escapeHtml()` for all user/persisted strings.
+6. If adding randomizer/JSON to webview, build script in TS module (see `drum-kit.ts` / `sfx-prompt.ts`) — avoid duplicating constants in HTML.
+7. Bump `FEATURE_VERSIONS` + `CHANGELOG.md` on behavior change.
+8. Run `npm run build` — post-build checks validate version sync and drum/API unit tests.
+
+### Common modal pitfalls
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Modal returns `{}` / parse fails | Invalid JSON in `closeWithResult` | Always `JSON.stringify` plain objects |
+| Randomizer undefined in webview | Script placeholder not replaced | Check `prepare*ModalHtml` replace order |
+| Saved settings ignored | Normalizer drops fields | Update `normalize*` + `Stored*` types + migration |
+| Drum pad row IDs mismatch | Index vs id confusion | Use numeric `padIndex` 0–6 consistently |
+| Progress opens without key | Key resolved inside progress callback | Use `resolveApiKeyWithPrompt` before `withElevenLabsProgress` |
+| XSS in injected rows | Unescaped persisted text | `escapeHtml()` in `buildDrumPadRowsHtml` |
+| Theme colors wrong | Hardcoded colors in HTML | Use `--c-*` variables only |
 
 ### Errors
 
@@ -95,13 +278,15 @@ elevenlabs-client.ts (API) → pipelines.ts (orchestration) → extension.ts (co
 
 ### API key & storage
 
-Resolution order (`resolveApiKey`):
+Resolution order (`resolveApiKey` in `api-key.ts`):
 
 1. `ELEVENLABS_API_KEY` env var
 2. `{storageDirectory}/api-key.txt`
-3. `ELEVENLABS_STORAGE_DIRECTORY` env (fallback search path)
+3. Modal prompt via `resolveApiKeyWithPrompt()` (validates + saves)
 
-Dev: `scripts/start-dev.ts` passes `--storage-directory` and `--temp-directory` from `.env`. Persisted config: `elevenlabs-config.json` in storage dir.
+Manage saved key: **Manage ElevenLabs API Key** on Drum Rack / Audio Track → `promptManageApiKey`.
+
+Dev: `scripts/start-dev.ts` passes `--storage-directory` and `--temp-directory` from `.env`. Persisted config: `elevenlabs-config.json` in storage dir (`drumKit` section for last Drum Rack pad layout).
 
 ### Dev tooling
 
@@ -125,7 +310,7 @@ Dev: `scripts/start-dev.ts` passes `--storage-directory` and `--temp-directory` 
 
 1. API wrapper in `src/elevenlabs-client.ts` — if it uploads files, use `postMultipart` not SDK streams
 2. Pipeline in `src/pipelines.ts` via `withElevenLabsProgress`
-3. Modal in `ui/*.html` + prompt in `src/ui.ts` — colors from `src/ui-theme.ts`, layout from `ui/modal-base.css` (injected by `prepareModalHtml`)
+3. Modal in `ui/*.html` + prompt in `src/ui.ts` — see [Modal UI windows](#modal-ui-windows-extension-host-webview); colors from `src/ui-theme.ts`, layout from `ui/modal-base.css` (injected by `prepareModalHtml`)
 4. Command + context menu in `src/extension.ts`
 5. Register in `FEATURE_VERSIONS` + `CHANGELOG.md`
 6. `npm run build` and smoke in Live (Developer Mode + `npm start`)
@@ -172,6 +357,7 @@ To retheme: change `ACTIVE_UI_THEME` in `ui-theme.ts` (or add a preset to `UI_TH
 | Doc | Use when |
 |-----|----------|
 | [README.md](README.md) | User setup, storage dir, `.ablx` install |
-| [docs/roadmap.md](docs/roadmap.md) | v0.5.0+ scope |
+| [docs/roadmap.md](docs/roadmap.md) | Shipped + planned scope |
+| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Drum Rack SFX pad-slot + API key (current) |
 | [docs/pre-release-checklist.md](docs/pre-release-checklist.md) | Before tagging a release |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |

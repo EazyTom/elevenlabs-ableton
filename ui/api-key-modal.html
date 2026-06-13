@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ElevenLabs API Key</title>
+  {{EXISTING_KEY_SCRIPT}}
+  <script>
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) window.webkit.messageHandlers.live.postMessage(message);
+      else if (window.chrome?.webview) window.chrome.webview.postMessage(message);
+    }
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+    function setError(message) {
+      const el = document.getElementById("error");
+      el.textContent = message || "";
+      el.hidden = !message;
+    }
+    function toggleShowKey() {
+      const input = document.getElementById("apiKey");
+      const btn = document.getElementById("showKeyBtn");
+      const reveal = input.type === "password";
+      input.type = reveal ? "text" : "password";
+      btn.textContent = reveal ? "Hide" : "Show";
+    }
+    function submit() {
+      setError("");
+      const apiKey = document.getElementById("apiKey").value.trim();
+      if (!apiKey) {
+        setError("Enter your ElevenLabs API key.");
+        document.getElementById("apiKey").focus();
+        return;
+      }
+      closeWithResult({ cancelled: false, apiKey });
+    }
+    function clearKey() {
+      if (!confirm("Remove the stored API key from disk?")) return;
+      closeWithResult({ cancelled: false, clearKey: true });
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("apiKey").focus();
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeWithResult({ cancelled: true });
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+      });
+    });
+  </script>
+  <style>
+    body { gap: 0.65em; }
+    .path-hint { font-size: 0.9em; word-break: break-all; }
+    .env-hint { font-size: 0.95em; color: var(--c-accent-secondary); }
+  </style>
+</head>
+<body>
+  <p>Paste your ElevenLabs API key. It will be saved locally as <code>api-key.txt</code>.</p>
+  <p class="hint path-hint">Save location: <strong>{{STORAGE_PATH}}</strong></p>
+  {{ENV_KEY_HINT}}
+  {{EXISTING_KEY_HINT}}
+
+  <p id="error" class="error" hidden></p>
+
+  <label for="apiKey">API key</label>
+  <div class="prompt-header" style="display:flex;gap:0.5em;align-items:center;">
+    <input id="apiKey" type="password" placeholder="sk_…" style="flex:1;" autocomplete="off" spellcheck="false" />
+    <button id="showKeyBtn" type="button" onclick="toggleShowKey()">Show</button>
+  </div>
+
+  <div class="buttons">
+    {{CLEAR_BUTTON}}
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Save</button>
+  </div>
+</body>
+</html>

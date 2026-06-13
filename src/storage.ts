@@ -1,6 +1,13 @@
 import { readFile, writeFile } from "fs/promises";
 import path from "path";
 
+import {
+  DEFAULT_KIT_TYPE_BY_PAD,
+  defaultDurationForType,
+  DRUM_PAD_SLOT_COUNT,
+  DRUM_RACK_START_NOTE,
+} from "./drum-kit.js";
+
 export interface StoredClonedVoice {
   voiceId: string;
   name: string;
@@ -14,10 +21,65 @@ export interface StoredPronunciationDictionary {
   createdAt: number;
 }
 
+export interface StoredDrumPadSettings {
+  padIndex: number;
+  type: string;
+  stylePhrase: string;
+  durationSeconds: number;
+  autoDuration?: boolean;
+}
+
+export interface StoredDrumKitSettings {
+  startMidiNote: number;
+  overwriteOccupied: boolean;
+  kickKey?: string;
+  snareKey?: string;
+  pads: StoredDrumPadSettings[];
+}
+
 export interface ExtensionStorageConfig {
   clonedVoices: StoredClonedVoice[];
   pronunciationDictionaries: StoredPronunciationDictionary[];
   activePronunciationDictionaryId?: string;
+  drumKit?: StoredDrumKitSettings;
+}
+
+/** @deprecated Use StoredDrumPadSettings */
+export type StoredDrumKitPadSettings = StoredDrumPadSettings;
+
+function normalizeStoredDrumPad(
+  raw: Partial<StoredDrumPadSettings> & { id?: string; promptPrefix?: string },
+  padIndex: number,
+): StoredDrumPadSettings {
+  const type =
+    raw.type ??
+    (raw.id && DEFAULT_KIT_TYPE_BY_PAD.includes(raw.id as (typeof DEFAULT_KIT_TYPE_BY_PAD)[number])
+      ? raw.id
+      : DEFAULT_KIT_TYPE_BY_PAD[padIndex] ?? "kick");
+  return {
+    padIndex: raw.padIndex ?? padIndex,
+    type,
+    stylePhrase: raw.stylePhrase ?? raw.promptPrefix ?? "",
+    durationSeconds: raw.durationSeconds ?? defaultDurationForType(type),
+    autoDuration: raw.autoDuration !== false,
+  };
+}
+
+function normalizeStoredDrumKit(raw: Partial<StoredDrumKitSettings> | undefined): StoredDrumKitSettings | undefined {
+  if (!raw) return undefined;
+  const pads: StoredDrumPadSettings[] = [];
+  const rawPads = raw.pads ?? [];
+  for (let i = 0; i < DRUM_PAD_SLOT_COUNT; i++) {
+    const saved = rawPads.find((p) => p.padIndex === i) ?? rawPads[i];
+    pads.push(normalizeStoredDrumPad(saved ?? {}, i));
+  }
+  return {
+    startMidiNote: raw.startMidiNote ?? DRUM_RACK_START_NOTE,
+    overwriteOccupied: raw.overwriteOccupied ?? false,
+    kickKey: raw.kickKey,
+    snareKey: raw.snareKey,
+    pads,
+  };
 }
 
 const CONFIG_FILENAME = "elevenlabs-config.json";
@@ -43,6 +105,7 @@ export async function loadStorageConfig(
       clonedVoices: parsed.clonedVoices ?? [],
       pronunciationDictionaries: parsed.pronunciationDictionaries ?? [],
       activePronunciationDictionaryId: parsed.activePronunciationDictionaryId,
+      drumKit: normalizeStoredDrumKit(parsed.drumKit),
     };
   } catch {
     return { ...EMPTY_CONFIG };
@@ -91,4 +154,20 @@ export function getActivePronunciationDictionary(
   return config.pronunciationDictionaries.find(
     (d) => d.id === config.activePronunciationDictionaryId,
   );
+}
+
+export async function getDrumKitSettings(
+  storageDirectory: string | undefined,
+): Promise<StoredDrumKitSettings | undefined> {
+  const config = await loadStorageConfig(storageDirectory);
+  return config.drumKit;
+}
+
+export async function saveDrumKitSettings(
+  storageDirectory: string | undefined,
+  settings: StoredDrumKitSettings,
+): Promise<void> {
+  const config = await loadStorageConfig(storageDirectory);
+  config.drumKit = settings;
+  await saveStorageConfig(storageDirectory, config);
 }

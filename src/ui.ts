@@ -1,6 +1,7 @@
 import type { initialize } from "@ableton-extensions/sdk";
 import { DrumRack } from "@ableton-extensions/sdk";
 
+import apiKeyModalHtml from "../ui/api-key-modal.html";
 import alignLyricsModalHtml from "../ui/align-lyrics-modal.html";
 import cloneVoiceModalHtml from "../ui/clone-voice-modal.html";
 import dialogueModalHtml from "../ui/dialogue-modal.html";
@@ -15,13 +16,32 @@ import transcriptModalHtml from "../ui/transcript-modal.html";
 import ttsModalHtml from "../ui/tts-modal.html";
 import voiceModalHtml from "../ui/voice-modal.html";
 import {
+  apiKeyFilePath,
+  clearApiKeyFile,
+  hasStoredApiKeyFile,
+  readApiKeyFromStorageFile,
+  saveApiKeyToStorage,
+  tryResolveApiKey,
+  validateApiKey,
+} from "./api-key.js";
+import {
   createClient,
   listVoices,
-  resolveApiKey,
   type VoiceSummary,
 } from "./elevenlabs-client.js";
-import { listPadsWithSimpler, type DrumPadSummary } from "./drum-io.js";
-import { DRUM_RACK_START_NOTE } from "./drum-kit.js";
+import { validateDialogueInput } from "./dialogue.js";
+import {
+  buildDrumPadRandomizerScript,
+  clampPadDurationSeconds,
+  DEFAULT_KIT_TYPE_BY_PAD,
+  defaultCharacteristicsForType,
+  defaultDurationForType,
+  DRUM_PAD_SLOT_COUNT,
+  DRUM_RACK_START_NOTE,
+  DRUM_KIT_START_NOTE_OPTIONS,
+  DRUM_TYPES,
+  DRUM_PITCH_KEY_OPTIONS,
+} from "./drum-kit.js";
 import { parseAudioOutputFormat } from "./audio-output-formats.js";
 import { clampMusicLengthMs } from "./music-length.js";
 import { buildMusicPromptRandomizerScript, musicForceInstrumental } from "./music-prompt.js";
@@ -30,10 +50,17 @@ import { buildSfxPromptRandomizerScript } from "./sfx-prompt.js";
 import { clampSfxVariants } from "./sfx-variants.js";
 import { MODAL_HEADER_EXTRA_HEIGHT, prepareModalHtml } from "./ui-branding.js";
 import { getCachedVoices, setCachedVoices } from "./voice-cache.js";
+import {
+  getDrumKitSettings,
+  saveDrumKitSettings,
+  type StoredDrumKitSettings,
+} from "./storage.js";
 import type {
   AlignLyricsModalResult,
+  ApiKeyModalResult,
   CloneVoiceModalResult,
   DialogueModalResult,
+  DrumPadConfig,
   DrumRackSfxModalResult,
   MusicModalResult,
   PronunciationModalResult,
@@ -71,14 +98,109 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function buildPadOptionsHtml(pads: DrumPadSummary[]): string {
-  if (pads.length === 0) {
-    return '<option value="">No Simpler pads — add a Simpler to a pad first</option>';
+function buildDrumTypeOptionsHtml(selectedType: string): string {
+  return DRUM_TYPES.map((t) => {
+    const sel = t.id === selectedType ? " selected" : "";
+    return `<option value="${t.id}"${sel}>${escapeHtml(t.label)}</option>`;
+  }).join("");
+}
+
+function buildDrumPadRowsHtml(persisted: StoredDrumKitSettings | undefined): string {
+  const rows: string[] = [];
+  for (let i = 0; i < DRUM_PAD_SLOT_COUNT; i++) {
+    const saved = persisted?.pads.find((p) => p.padIndex === i);
+    const type = saved?.type ?? DEFAULT_KIT_TYPE_BY_PAD[i] ?? "kick";
+    const phrase = escapeHtml(saved?.stylePhrase ?? "");
+    const characteristics = escapeHtml(defaultCharacteristicsForType(type));
+    const duration = clampPadDurationSeconds(saved?.durationSeconds, defaultDurationForType(type));
+    const sliderValue = Math.round(duration * 2);
+    const autoDuration = saved?.autoDuration !== false;
+    const autoChecked = autoDuration ? " checked" : "";
+    const enabled = i === 0;
+    const checked = enabled ? " checked" : "";
+    const durationLabel = autoDuration ? "Auto" : `${duration.toFixed(1)} sec`;
+    rows.push(`<div class="pad-row" id="padRow_${i}">
+  <div class="pad-row-header">
+    <label class="checkbox pad-enable"><input id="padEnabled_${i}" type="checkbox"${checked} /> Enable</label>
+    <span id="padLabel_${i}" class="pad-label">Drum Pad ${i + 1}</span>
+    <select id="padType_${i}" class="pad-type">${buildDrumTypeOptionsHtml(type)}</select>
+    <button type="button" class="pad-randomize" onclick="randomizePadPhrase(${i})">Randomize</button>
+  </div>
+  <input id="padPhrase_${i}" class="pad-phrase" type="text" value="${phrase}" placeholder="Style or mood phrase" />
+  <textarea id="padCharacteristics_${i}" class="pad-characteristics" rows="2">${characteristics}</textarea>
+  <label class="tempo-row pad-duration-row">
+    <span class="control-label">Duration</span>
+    <span id="padDurationValue_${i}" class="slider-value">${durationLabel}</span>
+    <input id="padDuration_${i}" type="range" min="1" max="60" step="1" value="${sliderValue}" />
+    <label class="checkbox pad-auto-inline"><input id="padAutoDuration_${i}" type="checkbox"${autoChecked} /> Auto</label>
+  </label>
+</div>`);
   }
-  const opts = pads
-    .map((p) => `<option value="${p.midiNote}">MIDI note ${p.midiNote}</option>`)
-    .join("");
-  return `<option value="">Select pad…</option>${opts}`;
+  return rows.join("\n");
+}
+
+function buildStartNoteOptionsHtml(selected = DRUM_RACK_START_NOTE): string {
+  return DRUM_KIT_START_NOTE_OPTIONS.map((opt) => {
+    const sel = opt.midiNote === selected ? " selected" : "";
+    return `<option value="${opt.midiNote}"${sel}>${opt.label} (${opt.midiNote})</option>`;
+  }).join("");
+}
+
+function buildPitchKeyOptionsHtml(selected = ""): string {
+  return DRUM_PITCH_KEY_OPTIONS.map((key) => {
+    const label = key ? key : "None";
+    const sel = key === selected ? " selected" : "";
+    return `<option value="${key}"${sel}>${label}</option>`;
+  }).join("");
+}
+
+function prepareDrumRackSfxModalHtml(
+  template: string,
+  persisted: StoredDrumKitSettings | undefined,
+): string {
+  const selectedStart = persisted?.startMidiNote ?? DRUM_RACK_START_NOTE;
+  return template
+    .replace(/\{\{DRUM_PAD_RANDOMIZER\}\}/g, buildDrumPadRandomizerScript())
+    .replace(/\{\{DRUM_PAD_ROWS\}\}/g, buildDrumPadRowsHtml(persisted))
+    .replace(/\{\{START_NOTE_OPTIONS\}\}/g, buildStartNoteOptionsHtml(selectedStart))
+    .replace(/\{\{KICK_KEY_OPTIONS\}\}/g, buildPitchKeyOptionsHtml(persisted?.kickKey ?? ""))
+    .replace(/\{\{SNARE_KEY_OPTIONS\}\}/g, buildPitchKeyOptionsHtml(persisted?.snareKey ?? ""))
+    .replace(/\{\{OVERWRITE_CHECKED\}\}/g, persisted?.overwriteOccupied ? " checked" : "");
+}
+
+function normalizeDrumPads(parsed: DrumRackSfxModalResult): DrumPadConfig[] {
+  const pads = parsed.pads ?? [];
+  return pads.map((pad) => {
+    const type = pad.type || DEFAULT_KIT_TYPE_BY_PAD[pad.padIndex] || "kick";
+    const autoDuration = pad.autoDuration !== false;
+    return {
+      ...pad,
+      type,
+      durationSeconds: clampPadDurationSeconds(pad.durationSeconds, defaultDurationForType(type)),
+      characteristics: pad.characteristics?.trim() || defaultCharacteristicsForType(type),
+      enabled: pad.enabled === true,
+      autoDuration,
+    };
+  });
+}
+
+function normalizeDrumRackSfxModalResult(parsed: DrumRackSfxModalResult): DrumRackSfxModalResult {
+  const kickKey = parsed.kickKey?.trim();
+  const snareKey = parsed.snareKey?.trim();
+  return {
+    ...parsed,
+    startMidiNote: parsed.startMidiNote ?? DRUM_RACK_START_NOTE,
+    pads: normalizeDrumPads(parsed),
+    overwriteOccupied: parsed.overwriteOccupied ?? false,
+    kickKey: kickKey || undefined,
+    snareKey: snareKey || undefined,
+    modelId:
+      parsed.modelId === "eleven_text_to_sound_v1"
+        ? "eleven_text_to_sound_v1"
+        : "eleven_text_to_sound_v2",
+    outputFormat: parseAudioOutputFormat(parsed.outputFormat),
+    promptInfluence: parsed.promptInfluence ?? 0.3,
+  };
 }
 
 function buildVoiceOptionsHtml(voices: VoiceSummary[]): string {
@@ -96,7 +218,9 @@ async function fetchVoices(context: ExtensionContext): Promise<VoiceSummary[]> {
   const cached = getCachedVoices();
   if (cached) return cached;
 
-  const apiKey = await resolveApiKey(context.environment.storageDirectory);
+  const apiKey = await resolveApiKeyWithPrompt(context);
+  if (!apiKey) return [];
+
   const client = createClient(apiKey);
   try {
     const voices = await listVoices(client);
@@ -108,13 +232,162 @@ async function fetchVoices(context: ExtensionContext): Promise<VoiceSummary[]> {
   }
 }
 
+function prepareApiKeyModalHtml(
+  context: ExtensionContext,
+  manageMode: boolean,
+  existingKey?: string,
+): string {
+  const storageDirectory = context.environment.storageDirectory;
+  const storagePath = storageDirectory
+    ? apiKeyFilePath(storageDirectory)
+    : "(storage directory not configured — see README)";
+  const envSet = Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+  const envHint = envSet
+    ? '<p class="env-hint">ELEVENLABS_API_KEY is set in the environment and takes precedence over the saved file.</p>'
+    : "";
+  const existingHint = existingKey
+    ? '<p class="hint">A key is saved. Use Show to view it, edit to replace, or Remove to delete.</p>'
+    : "";
+  const clearButton =
+    manageMode && storageDirectory && existingKey
+      ? '<button type="button" onclick="clearKey()">Remove saved key</button>'
+      : "";
+  const existingKeyScript = existingKey
+    ? `<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("apiKey").value = ${JSON.stringify(existingKey)};
+});
+</script>`
+    : "";
+  return apiKeyModalHtml
+    .replace(/\{\{STORAGE_PATH\}\}/g, escapeHtml(storagePath))
+    .replace(/\{\{ENV_KEY_HINT\}\}/g, envHint)
+    .replace(/\{\{EXISTING_KEY_HINT\}\}/g, existingHint)
+    .replace(/\{\{CLEAR_BUTTON\}\}/g, clearButton)
+    .replace(/\{\{EXISTING_KEY_SCRIPT\}\}/g, existingKeyScript);
+}
+
+export async function promptApiKey(
+  context: ExtensionContext,
+  opts?: { manageMode?: boolean; errorMessage?: string },
+): Promise<ApiKeyModalResult | null> {
+  const storageDirectory = context.environment.storageDirectory;
+  if (!storageDirectory) {
+    await showError(
+      context,
+      "Storage directory is not configured. Launch the extension with --storage-directory (see README).",
+    );
+    return null;
+  }
+
+  let existingKey: string | undefined;
+  if (opts?.manageMode) {
+    existingKey = await readApiKeyFromStorageFile(storageDirectory);
+  }
+
+  let html = prepareApiKeyModalHtml(context, opts?.manageMode ?? false, existingKey);
+  if (opts?.errorMessage) {
+    html = html.replace(
+      '<p id="error" class="error" hidden></p>',
+      `<p id="error" class="error">${escapeHtml(opts.errorMessage)}</p>`,
+    );
+  }
+
+  const parsed = await showModal<ApiKeyModalResult>(context, html, 460, 300, "ElevenLabs API Key");
+  if (parsed.cancelled) return null;
+  return parsed;
+}
+
+export async function resolveApiKeyWithPrompt(context: ExtensionContext): Promise<string | undefined> {
+  const storageDirectory = context.environment.storageDirectory;
+  const existing = await tryResolveApiKey(storageDirectory);
+  if (existing) return existing;
+
+  let errorMessage: string | undefined;
+
+  for (;;) {
+    const result = await promptApiKey(context, errorMessage ? { errorMessage } : undefined);
+    errorMessage = undefined;
+    if (!result) return undefined;
+    if (result.clearKey) {
+      if (storageDirectory) await clearApiKeyFile(storageDirectory);
+      await showResult(context, "API key removed", "The stored api-key.txt file was removed.");
+      return undefined;
+    }
+    const key = result.apiKey?.trim();
+    if (!key || !storageDirectory) return undefined;
+
+    const validation = await validateApiKey(key);
+    if (validation.ok) {
+      await saveApiKeyToStorage(storageDirectory, key);
+      return key;
+    }
+    if (validation.reason === "invalid") {
+      errorMessage = "That API key was rejected by ElevenLabs. Check the key and try again.";
+      continue;
+    }
+    await saveApiKeyToStorage(storageDirectory, key);
+    await showResult(
+      context,
+      "API key saved",
+      `Could not verify the key online (${validation.message}). It was saved anyway — generation will confirm on first use.`,
+    );
+    return key;
+  }
+}
+
+export async function promptManageApiKey(context: ExtensionContext): Promise<void> {
+  if (process.env.ELEVENLABS_API_KEY?.trim()) {
+    await showResult(
+      context,
+      "API key",
+      "ELEVENLABS_API_KEY is set in the environment and overrides any saved api-key.txt file.",
+    );
+    return;
+  }
+  const storageDirectory = context.environment.storageDirectory;
+  if (!storageDirectory) {
+    await showError(
+      context,
+      "Storage directory is not configured. Launch the extension with --storage-directory (see README).",
+    );
+    return;
+  }
+  const hasFile = await hasStoredApiKeyFile(storageDirectory);
+  const existingKey = hasFile ? await readApiKeyFromStorageFile(storageDirectory) : undefined;
+  const result = await promptApiKey(context, { manageMode: Boolean(existingKey) });
+  if (!result) return;
+  if (result.clearKey) {
+    await clearApiKeyFile(storageDirectory);
+    await showResult(context, "API key removed", "The stored api-key.txt file was removed.");
+    return;
+  }
+  const key = result.apiKey?.trim();
+  if (!key) return;
+  if (existingKey && key === existingKey) {
+    await showResult(context, "API key unchanged", "Your stored API key is still active.");
+    return;
+  }
+  const validation = await validateApiKey(key);
+  if (!validation.ok && validation.reason === "invalid") {
+    await showError(context, "That API key was rejected by ElevenLabs.");
+    return;
+  }
+  await saveApiKeyToStorage(storageDirectory, key);
+  if (!validation.ok && validation.reason === "network") {
+    await showResult(
+      context,
+      "API key saved",
+      `Could not verify online (${validation.message}). Key saved to api-key.txt.`,
+    );
+  } else {
+    await showResult(context, "API key saved", `Saved to ${apiKeyFilePath(storageDirectory)}`);
+  }
+}
+
 function injectVoiceOptions(template: string, voices: VoiceSummary[]): string {
   const options = buildVoiceOptionsHtml(voices);
   return template.replace(/\{\{VOICE_OPTIONS\}\}/g, options);
-}
-
-function prepareSfxModalHtml(template: string): string {
-  return template.replace(/\{\{SFX_PROMPT_RANDOMIZER\}\}/g, buildSfxPromptRandomizerScript());
 }
 
 function clampLiveTempoForSlider(tempo: number): number {
@@ -161,11 +434,8 @@ function normalizeSfxModalResult(parsed: SfxModalResult): SfxModalResult {
   };
 }
 
-function normalizeDrumRackSfxModalResult(parsed: DrumRackSfxModalResult): DrumRackSfxModalResult {
-  return {
-    ...normalizeSfxModalResult(parsed),
-    startMidiNote: parsed.startMidiNote ?? DRUM_RACK_START_NOTE,
-  };
+function prepareSfxModalHtml(template: string): string {
+  return template.replace(/\{\{SFX_PROMPT_RANDOMIZER\}\}/g, buildSfxPromptRandomizerScript());
 }
 
 function buildSfxVariantOptionsHtml(variants: Uint8Array[]): string {
@@ -277,13 +547,15 @@ export async function promptDialogue(context: ExtensionContext): Promise<Dialogu
     .replace("{{VOICE_OPTIONS_B}}", options)
     .replace("{{VOICE_OPTIONS_C}}", options);
   const parsed = await showModal<DialogueModalResult>(context, html, 480, 520, "Text to dialogue");
-  if (
-    parsed.cancelled ||
-    !parsed.script?.trim() ||
-    !parsed.voiceA ||
-    !parsed.voiceB ||
-    !parsed.voiceC
-  ) {
+  if (parsed.cancelled || !parsed.script?.trim() || !parsed.voiceA || !parsed.voiceB) {
+    return null;
+  }
+  const validationError = validateDialogueInput(parsed.script, {
+    voiceA: parsed.voiceA,
+    voiceB: parsed.voiceB,
+    voiceC: parsed.voiceC,
+  });
+  if (validationError) {
     return null;
   }
   return parsed;
@@ -291,58 +563,37 @@ export async function promptDialogue(context: ExtensionContext): Promise<Dialogu
 
 export async function promptDrumRackSfx(
   context: ExtensionContext,
-  drumRack: DrumRack<"1.0.0">,
+  _drumRack: DrumRack<"1.0.0">,
 ): Promise<DrumRackSfxModalResult | null> {
-  const pads = listPadsWithSimpler(drumRack);
-  const html = prepareSfxModalHtml(
-    drumRackSfxModalHtml.replace(/\{\{PAD_OPTIONS\}\}/g, buildPadOptionsHtml(pads)),
-  );
+  const persisted = await getDrumKitSettings(context.environment.storageDirectory);
+  const html = prepareDrumRackSfxModalHtml(drumRackSfxModalHtml, persisted);
   const parsed = await showModal<DrumRackSfxModalResult>(
     context,
     html,
-    440,
-    760,
-    "Drum rack SFX",
+    520,
+    920,
+    "Drum Rack SFX",
   );
   if (parsed.cancelled) return null;
 
-  const variants = clampSfxVariants(parsed.variants);
-  const startMidiNote = parsed.startMidiNote ?? DRUM_RACK_START_NOTE;
+  const pads = normalizeDrumPads(parsed);
+  if (!pads.some((p) => p.enabled)) return null;
 
-  if (parsed.buildDrumKit) {
-    return normalizeDrumRackSfxModalResult({
-      ...parsed,
-      variants: 1,
-      autoLoadPads: false,
-      buildDrumKit: true,
-      startMidiNote,
-    });
-  }
-
-  if (parsed.autoLoadPads) {
-    if (!parsed.text?.trim()) return null;
-    return normalizeDrumRackSfxModalResult({
-      ...parsed,
-      variants,
-      autoLoadPads: true,
-      buildDrumKit: false,
-      startMidiNote,
-    });
-  }
-
-  if (!parsed.text?.trim()) return null;
-  const midiNote = parsed.midiNote;
-  if (midiNote === undefined || !Number.isFinite(midiNote) || midiNote < 0 || midiNote > 127) {
-    return null;
-  }
-  return normalizeDrumRackSfxModalResult({
-    ...parsed,
-    variants,
-    midiNote,
-    autoLoadPads: false,
-    buildDrumKit: false,
-    startMidiNote,
+  const result = normalizeDrumRackSfxModalResult({ ...parsed, pads });
+  await saveDrumKitSettings(context.environment.storageDirectory, {
+    startMidiNote: result.startMidiNote ?? DRUM_RACK_START_NOTE,
+    overwriteOccupied: result.overwriteOccupied ?? false,
+    kickKey: result.kickKey,
+    snareKey: result.snareKey,
+    pads: (result.pads ?? []).map((p) => ({
+      padIndex: p.padIndex,
+      type: p.type,
+      stylePhrase: p.stylePhrase,
+      durationSeconds: p.durationSeconds,
+      autoDuration: p.autoDuration !== false,
+    })),
   });
+  return result;
 }
 
 export async function promptCloneVoice(context: ExtensionContext): Promise<CloneVoiceModalResult | null> {

@@ -9,11 +9,11 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.5.0](CHANGELOG.md#v050)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.6.0](CHANGELOG.md#v060)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
 
 | | |
 |---|---|
-| **Extension version** | `0.5.0` — **19** context-menu features |
+| **Extension version** | `0.6.0` — **19** context-menu features |
 | **Ableton Extensions API** | `1.0.0` (`minimumApiVersion` in `manifest.json`) |
 | **Ableton SDK** | `@ableton-extensions/sdk` **1.0.0-beta.0** |
 | **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` **^2.51.0** |
@@ -21,6 +21,13 @@ Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech di
 | **Node.js** (dev/build only) | **≥ 24.14.1** |
 
 > Extensions are not available in retail Live builds today. You need a Live 12.4 program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
+
+### What's new in v0.6.0
+
+See [CHANGELOG.md](CHANGELOG.md#v060) and [docs/v0.6.0-features.md](docs/v0.6.0-features.md).
+
+- **Drum Rack SFX** — seven pad-slot modal (type, style phrase, characteristics, per-pad auto-duration); Build entire drum kit; MIDI clip slot entry
+- **API key onboarding** — paste-and-save when no key configured; Manage API Key on Drum Rack and Audio Track with show/hide
 
 ### What's new in v0.5.0
 
@@ -129,17 +136,21 @@ Right-click an **audio clip slot** or **arrangement selection** → **Generate M
 
 The composed prompt merges selected genres, optional tempo, and your description before calling the music API (direct `/v1/music` POST for v2 / loop support).
 
-#### Drum rack SFX (`Drum Rack` context menu)
+#### Drum Rack SFX (`Drum Rack` / MIDI clip slot context menu)
 
-Right-click a **Drum Rack** → **Generate SFX into Drum Rack (ElevenLabs)**. Includes the same **Duration**, **Variants**, **Model**, **Loop**, and **Randomize** controls as SFX, plus:
+Right-click a **Drum Rack** or a **MIDI clip slot** on a track with a Drum Rack → **Generate Drum Rack SFX (ElevenLabs)**. Modal title: **Drum Rack SFX**. Seven pad slots, each with:
 
-| Mode | Description |
-|------|-------------|
-| **Single pad** | Pick a pad (MIDI note with Simpler); one SFX or variant picker when variants > 1. |
-| **Auto-load variants to pads** | Generates up to **10** variants and loads each onto **consecutive pads from C0** (MIDI 0 upward), skipping the picker. |
-| **Build entire drum kit** | Seven kit pieces (kick, snare, hats, rimshot, clap, 808) from your prompt style → pads **C0–F♯0** (MIDI 0–6). Missing Simplers are created automatically. |
+| Control | Description |
+|---------|-------------|
+| **Enable** | Default: only Pad 1 enabled (one SFX). |
+| **Type** | Kick, Snare, Open Hat, Closed Hat, Rimshot, Perc, Clap, Other. |
+| **Style phrase** | Randomizable mood/style text; per-type phrase banks. |
+| **Characteristics** | Editable one-shot traits (auto-filled per type: minimal silence before transient, etc.). |
+| **Duration + Auto** | Per-pad duration slider or API auto-duration (default on). |
 
-Each variant or kit piece is a separate ElevenLabs API call (uses credits accordingly).
+**Build entire drum kit** enables all 7 pads, presets types, and randomizes style phrases. Pads map **consecutively from Start pad** (default **C1** / MIDI 36). **Kick key** applies to Kick-type pads. **Overwrite occupied** replaces pads that already have samples. Missing Simplers are created automatically. Last pad layout is remembered in `elevenlabs-config.json` (characteristics are re-derived from type on open).
+
+Each enabled pad is a separate ElevenLabs API call (uses credits accordingly).
 
 ---
 
@@ -204,7 +215,7 @@ At runtime the extension looks for a key in this order:
 1. Environment variable `ELEVENLABS_API_KEY` (if set in the Extension Host process)
 2. File `{storageDirectory}/api-key.txt`
 
-If neither is found, features show an error asking you to configure a key.
+If neither is found, the extension prompts you to **paste your API key** in a modal, validates it when online, and saves it to `api-key.txt`. Right-click a **Drum Rack** or **Audio Track** → **Manage ElevenLabs API Key** to update or remove the saved key later.
 
 **Never commit your API key.** Do not place `api-key.txt` inside the repo or add it to git. Use a personal folder + `ELEVENLABS_STORAGE_DIRECTORY`, or set `ELEVENLABS_API_KEY` only in your local shell / `.env` (gitignored).
 
@@ -218,7 +229,7 @@ Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem 
 
 ### Install & run (pre-built `.ablx`)
 
-Download `elevenlabs-ableton-0.5.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
+Download `elevenlabs-ableton-0.6.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
 
 1. Open **Live → Preferences → Extensions**
 2. **Drag and drop** the `.ablx` onto the Extensions page
@@ -235,7 +246,7 @@ When a storage directory is configured, the extension also reads/writes:
 | File | Contents |
 |------|----------|
 | `api-key.txt` | Your API key (optional if you use `ELEVENLABS_API_KEY` instead) |
-| `elevenlabs-config.json` | Cloned voice IDs, pronunciation dictionaries, active dictionary |
+| `elevenlabs-config.json` | Cloned voice IDs, pronunciation dictionaries, active dictionary, last-used drum kit settings |
 
 Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs-temp`** by default (or `ELEVENLABS_TEMP_DIRECTORY` if set). That folder is safe to delete; it is recreated as needed.
 
@@ -250,12 +261,18 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.3.0** | Voice library picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules; enhanced SFX/Music/Drum Rack modals |
 | **0.5.0** | Session voice isolation; SFX/Music modal UX; Live tempo sync; audio-slot guards; UI layout polish |
+| **0.6.0** | Drum Rack SFX pad-slot modal; API key onboarding & management; MIDI clip slot drum entry |
 
 Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
 
 ---
 
 ## Roadmap
+
+### Shipped (v0.6.0)
+
+- **Drum Rack SFX** — pad-slot modal, Build entire kit, MIDI clip slot menu  
+- **API key** — onboarding modal, Manage API Key, show/hide saved key  
 
 ### Shipped (v0.5.0)
 
@@ -427,7 +444,7 @@ npm run package
 1. Open **Live 12.4 Alpha/Beta**
 2. Preferences → **Extensions** → enable **Developer Mode**
 3. Run `npm start` (or `extensions-cli run`) so Live loads the extension
-4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.5.0 active — 19 features`
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.6.0 active — 19 features`
 
 ---
 
@@ -438,10 +455,10 @@ From the project root, with **Node.js ≥ 24.14.1** and `vendor/*.tgz` SDK packa
 ```bash
 npm install
 npm run check:api          # optional — needs ELEVENLABS_API_KEY
-npm run package            # production build + elevenlabs-ableton-0.5.0.ablx
+npm run package            # production build + elevenlabs-ableton-0.6.0.ablx
 ```
 
-`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v050).
+`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v060).
 
 Manual steps before tagging: align versions in `src/version.ts`, `manifest.json`, and `package.json`; run [docs/pre-release-checklist.md](docs/pre-release-checklist.md).
 
@@ -504,11 +521,12 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 
 | Document | Audience |
 |----------|----------|
-| [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.5.0) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes (v0.1.0 → v0.6.0) |
 | [SUMMARY.md](SUMMARY.md) | Table of contents for this README |
 | [LICENSE](LICENSE) | GPL-3.0-or-later terms |
 | [docs/roadmap.md](docs/roadmap.md) | Planned features |
-| [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | Latest feature spec |
+| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Latest feature spec |
+| [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | v0.5.0 feature spec |
 | [docs/v0.4.0-features.md](docs/v0.4.0-features.md) | v0.4.0 feature spec |
 | [docs/code-review-notes.md](docs/code-review-notes.md) | Architecture review notes |
 | [docs/project-context.md](docs/project-context.md) | Lean dev/agent context |

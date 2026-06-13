@@ -20,6 +20,7 @@ import {
   selectionDuration,
   type ExtensionContext,
 } from "./live-selection.js";
+import { ensureDrumRackFromClipSlot } from "./drum-io.js";
 import {
   importGeneratedAudio,
   pipelineAlignToMidi,
@@ -46,7 +47,9 @@ import {
   promptCloneVoice,
   promptDialogue,
   promptDrumRackSfx,
+  promptManageApiKey,
   promptMusic,
+  showError,
   promptPronunciationRule,
   promptSfx,
   promptStemSeparation,
@@ -79,6 +82,8 @@ const COMMANDS = {
   dialogueClipSlot: `${NS}.dialogueClipSlot`,
   dialogueArrangement: `${NS}.dialogueArrangement`,
   drumRackSfx: `${NS}.drumRackSfx`,
+  drumRackSfxClipSlot: `${NS}.drumRackSfxClipSlot`,
+  manageApiKey: `${NS}.manageApiKey`,
   transcribeToMidiClip: `${NS}.transcribeToMidiClip`,
   transcribeToMidiArrangement: `${NS}.transcribeToMidiArrangement`,
   alignToMidiClip: `${NS}.alignToMidiClip`,
@@ -106,6 +111,7 @@ function registerMenus(context: ExtensionContext): void {
   menu("ClipSlot", "Generate Music (ElevenLabs)", COMMANDS.musicClipSlot);
   menu("ClipSlot", "Generate Dialogue (ElevenLabs)", COMMANDS.dialogueClipSlot);
   menu("ClipSlot", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolationClipSlot);
+  menu("ClipSlot", "Generate Drum Rack SFX (ElevenLabs)", COMMANDS.drumRackSfxClipSlot);
   menu("ClipSlotSelection", "Batch Text-to-Speech (ElevenLabs)", COMMANDS.batchTts);
 
   menu("AudioTrack.ArrangementSelection", "Generate Text-to-Speech (ElevenLabs)", COMMANDS.ttsArrangement);
@@ -129,7 +135,9 @@ function registerMenus(context: ExtensionContext): void {
 
   menu("AudioTrack", "Add Pronunciation Rule (ElevenLabs)", COMMANDS.pronunciationRule);
 
-  menu("DrumRack", "Generate SFX for Pad (ElevenLabs)", COMMANDS.drumRackSfx);
+  menu("DrumRack", "Generate Drum Rack SFX (ElevenLabs)", COMMANDS.drumRackSfx);
+  menu("DrumRack", "Manage ElevenLabs API Key", COMMANDS.manageApiKey);
+  menu("AudioTrack", "Manage ElevenLabs API Key", COMMANDS.manageApiKey);
   menu("Simpler", "Generate Text-to-Speech Sample (ElevenLabs)", COMMANDS.simplerTts);
   menu("Simpler", "Generate SFX Sample (ElevenLabs)", COMMANDS.simplerSfx);
 }
@@ -353,6 +361,22 @@ export function activate(activation: ActivationContext) {
     });
   });
 
+  register(context, COMMANDS.drumRackSfxClipSlot, (arg) => {
+    runSafe(async () => {
+      const drumRack = await ensureDrumRackFromClipSlot(context, arg as Handle);
+      if (!drumRack) {
+        await showError(
+          context,
+          "This clip slot is not on a MIDI track with a Drum Rack. Add a Drum Rack to the track first.",
+        );
+        return;
+      }
+      const modal = await promptDrumRackSfx(context, drumRack);
+      if (!modal) return;
+      await pipelineDrumRackSfx(context, drumRack, modal);
+    });
+  });
+
   register(context, COMMANDS.transcribeToMidiClip, (arg) => {
     runSafe(async () => {
       const clip = resolveHandle(context, arg as Handle, AudioClip);
@@ -482,6 +506,12 @@ export function activate(activation: ActivationContext) {
       const modal = await promptPronunciationRule(context);
       if (!modal) return;
       await pipelinePronunciationRule(context, modal);
+    });
+  });
+
+  register(context, COMMANDS.manageApiKey, () => {
+    runSafe(async () => {
+      await promptManageApiKey(context);
     });
   });
 

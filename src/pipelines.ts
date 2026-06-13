@@ -27,20 +27,21 @@ import {
   generateSfx,
   generateTts,
   isolateVocals,
-  resolveApiKey,
   separateMusicStems,
   transcribeAudio,
   transcribeWithWords,
   type PronunciationLocator,
   type StemVariationId,
 } from "./elevenlabs-client.js";
-import { parseDialogueScript } from "./dialogue.js";
-import { findSimplerOnPad, assertPadRange, ensureSimplerOnPad } from "./drum-io.js";
+import { parseDialogueScript, validateDialogueInput } from "./dialogue.js";
+import { assertPadRange, ensureSimplerOnPad, isDrumPadOccupied } from "./drum-io.js";
 import {
-  buildDrumKitPiecePrompt,
-  DRUM_KIT_PIECES,
+  defaultDurationForType,
   DRUM_RACK_START_NOTE,
-  drumKitMidiNote,
+  drumPadMidiNote,
+  drumTypeById,
+  noteName,
+  resolveDrumPadPrompt,
 } from "./drum-kit.js";
 import type { ExtensionContext } from "./live-selection.js";
 import { isAudioTrack, isClipSlot } from "./sdk-objects.js";
@@ -81,7 +82,7 @@ import {
   sfxRequestFromModal,
 } from "./sfx-variants.js";
 import { formatApiError } from "./api-errors.js";
-import { promptSfxVariantPick, showError, showResult } from "./ui.js";
+import { promptSfxVariantPick, resolveApiKeyWithPrompt, showError, showResult } from "./ui.js";
 
 export async function withElevenLabsProgress(
   context: ExtensionContext,
@@ -92,13 +93,13 @@ export async function withElevenLabsProgress(
     abortSignal: AbortSignal,
   ) => Promise<void>,
 ): Promise<void> {
-  const storageDirectory = context.environment.storageDirectory;
+  const apiKey = await resolveApiKeyWithPrompt(context);
+  if (!apiKey) return;
 
   await context.ui.withinProgressDialog(title, {}, async (update, abortSignal) => {
     try {
       if (abortSignal.aborted) return;
-      update("Resolving API key", 5);
-      const apiKey = await resolveApiKey(storageDirectory);
+      update("Connecting to ElevenLabs", 5);
       const client = createClient(apiKey);
       await run(client, update, abortSignal);
     } catch (err) {
@@ -198,15 +199,18 @@ function drumRackStartNote(modal: DrumRackSfxModalResult): number {
   return Number.isFinite(start) ? Math.round(start) : DRUM_RACK_START_NOTE;
 }
 
-function drumRackSfxRequest(modal: DrumRackSfxModalResult, text: string) {
+function drumRackSfxRequest(
+  modal: DrumRackSfxModalResult,
+  text: string,
+  overrides?: { durationSeconds?: number; autoDuration?: boolean },
+) {
   return {
     text,
-    durationSeconds: modal.durationSeconds,
-    autoDuration: modal.autoDuration,
+    durationSeconds: overrides?.durationSeconds,
+    autoDuration: overrides?.autoDuration ?? true,
     promptInfluence: modal.promptInfluence,
-    negativePrompt: modal.negativePrompt,
     outputFormat: parseAudioOutputFormat(modal.outputFormat),
-    loop: modal.loop,
+    loop: false,
     modelId: modal.modelId,
   };
 }
@@ -220,109 +224,6 @@ async function loadSfxToDrumPad(
 ): Promise<void> {
   const simpler = await ensureSimplerOnPad(context, drumRack, midiNote);
   await importBytesToSimpler(context, bytes, filename, simpler);
-}
-
-async function generateDrumRackVariants(
-  context: ExtensionContext,
-  client: ElevenLabsClient,
-  modal: DrumRackSfxModalResult,
-  update: (text: string, progress?: number) => void,
-  signal: AbortSignal,
-  pickIfMultiple: boolean,
-): Promise<Uint8Array[] | null> {
-  const count = clampSfxVariants(modal.variants);
-  const request = drumRackSfxRequest(modal, modal.text!);
-
-  if (count === 1) {
-    update("Generating sound effect", 45);
-    const bytes = await generateSfx(client, request);
-    if (bytes.byteLength < 200) {
-      throw new Error("Generated audio is empty or too small to import into Live.");
-    }
-    return [bytes];
-  }
-
-  const variants = await generateSfxVariants(client, request, count, (index, total) => {
-    if (signal.aborted) return;
-    update(
-      `Generating variant ${index} of ${total}`,
-      15 + Math.round(((index - 1) / total) * 55),
-    );
-  });
-
-  if (signal.aborted) return null;
-
-  if (!pickIfMultiple) {
-    return variants;
-  }
-
-  update("Choose a variant", 78);
-  const picked = await promptSfxVariantPick(context, variants);
-  return picked ? [picked] : null;
-}
-
-async function pipelineDrumRackMultiPad(
-  context: ExtensionContext,
-  drumRack: DrumRack<"1.0.0">,
-  modal: DrumRackSfxModalResult,
-): Promise<void> {
-  const startNote = drumRackStartNote(modal);
-  const count = clampSfxVariants(modal.variants);
-  assertPadRange(startNote, count);
-
-  await withElevenLabsProgress(context, "ElevenLabs Drum Rack SFX", async (client, update, signal) => {
-    const variants = await generateDrumRackVariants(context, client, modal, update, signal, false);
-    if (!variants || signal.aborted) return;
-
-    for (let i = 0; i < variants.length; i++) {
-      if (signal.aborted) return;
-      const midiNote = startNote + i;
-      update(`Loading pad MIDI ${midiNote} (C0+${i})`, 70 + Math.round((i / variants.length) * 25));
-      await loadSfxToDrumPad(
-        context,
-        drumRack,
-        midiNote,
-        variants[i]!,
-        importFilename(`elevenlabs-drum-${midiNote}`, parseAudioOutputFormat(modal.outputFormat)),
-      );
-    }
-    update("Done", 100);
-  });
-}
-
-async function pipelineDrumRackKit(
-  context: ExtensionContext,
-  drumRack: DrumRack<"1.0.0">,
-  modal: DrumRackSfxModalResult,
-): Promise<void> {
-  const startNote = drumRackStartNote(modal);
-  assertPadRange(startNote, DRUM_KIT_PIECES.length);
-
-  await withElevenLabsProgress(context, "ElevenLabs Drum Kit", async (client, update, signal) => {
-    for (let i = 0; i < DRUM_KIT_PIECES.length; i++) {
-      if (signal.aborted) return;
-      const piece = DRUM_KIT_PIECES[i]!;
-      const midiNote = drumKitMidiNote(i, startNote);
-      update(`Generating ${piece.label}`, 10 + Math.round((i / DRUM_KIT_PIECES.length) * 70));
-      const bytes = await generateSfx(
-        client,
-        drumRackSfxRequest(modal, buildDrumKitPiecePrompt(modal.text, piece)),
-      );
-      if (bytes.byteLength < 200) {
-        throw new Error(`${piece.label} generation failed — audio too small.`);
-      }
-      if (signal.aborted) return;
-      update(`Loading ${piece.label} → MIDI ${midiNote}`, 75 + Math.round((i / DRUM_KIT_PIECES.length) * 20));
-      await loadSfxToDrumPad(
-        context,
-        drumRack,
-        midiNote,
-        bytes,
-        importFilename(`elevenlabs-kit-${piece.id}`, parseAudioOutputFormat(modal.outputFormat)),
-      );
-    }
-    update("Done", 100);
-  });
 }
 
 export async function importGeneratedAudio(
@@ -722,15 +623,22 @@ export async function pipelineDialogue(
   target: ClipSlot<"1.0.0"> | AudioTrack<"1.0.0">,
   clipArgs: ImportClipArgs,
 ): Promise<void> {
-  const lines = parseDialogueScript(modal.script!, {
+  const voices = {
     voiceA: modal.voiceA!,
     voiceB: modal.voiceB!,
-    voiceC: modal.voiceC!,
-  });
+    voiceC: modal.voiceC,
+  };
+  const validationError = validateDialogueInput(modal.script!, voices);
+  if (validationError) {
+    await showError(context, validationError);
+    return;
+  }
+
+  const lines = parseDialogueScript(modal.script!, voices);
   if (!lines.length) {
     await showError(
       context,
-      "No dialogue lines found. Prefix each line with 1:, 2:, or 3: for speakers A, B, or C.\n\nExample:\n1: Hello there\n2: Hi, how are you?\n3: [excited] Count me in!",
+      "No dialogue lines could be parsed. Check that each line uses A:, B:, or C: prefixes.",
     );
     return;
   }
@@ -751,33 +659,96 @@ export async function pipelineDrumRackSfx(
   drumRack: DrumRack<"1.0.0">,
   modal: DrumRackSfxModalResult,
 ): Promise<void> {
-  if (modal.buildDrumKit) {
-    await pipelineDrumRackKit(context, drumRack, modal);
+  const startNote = drumRackStartNote(modal);
+  const enabledPads = (modal.pads ?? []).filter((p) => p.enabled);
+  if (!enabledPads.length) {
+    await showError(context, "No drum pads are enabled.");
     return;
   }
 
-  if (modal.autoLoadPads) {
-    await pipelineDrumRackMultiPad(context, drumRack, modal);
-    return;
-  }
-
-  const simpler = findSimplerOnPad(drumRack, modal.midiNote!);
-  if (!simpler) {
-    await showError(context, `No Simpler found on drum pad MIDI note ${modal.midiNote}.`);
-    return;
-  }
+  const maxPadIndex = enabledPads.reduce((max, p) => Math.max(max, p.padIndex), 0);
+  assertPadRange(startNote, maxPadIndex + 1);
 
   await withElevenLabsProgress(context, "ElevenLabs Drum Rack SFX", async (client, update, signal) => {
-    const variants = await generateDrumRackVariants(context, client, modal, update, signal, true);
-    if (!variants?.length || signal.aborted) return;
-    update("Replacing sample", 85);
-    await importBytesToSimpler(
-      context,
-      variants[0]!,
-      importFilename("elevenlabs-drum-rack-sfx", parseAudioOutputFormat(modal.outputFormat)),
-      simpler,
-    );
+    const skipped: string[] = [];
+    let loaded = 0;
+    const total = enabledPads.length;
+    let step = 0;
+
+    for (const pad of enabledPads) {
+      if (signal.aborted) return;
+
+      const drumType = drumTypeById(pad.type);
+      const label = drumType?.label ?? pad.type;
+      const midiNote = drumPadMidiNote(pad.padIndex, startNote);
+
+      if (!modal.overwriteOccupied && isDrumPadOccupied(drumRack, midiNote)) {
+        skipped.push(`${label} (${noteName(midiNote)})`);
+        update(
+          `Skipping ${label} (${noteName(midiNote)}) — pad has a sample`,
+          10 + Math.round((step / total) * 70),
+        );
+        step++;
+        continue;
+      }
+
+      update(`Generating ${label}`, 10 + Math.round((step / total) * 70));
+      const pitchKey =
+        pad.type === "kick" ? modal.kickKey : pad.type === "snare" ? modal.snareKey : undefined;
+      const text = resolveDrumPadPrompt(
+        pad.stylePhrase,
+        pad.characteristics,
+        pad.type,
+        pitchKey,
+      );
+      const autoDuration = pad.autoDuration !== false;
+      const bytes = await generateSfx(
+        client,
+        drumRackSfxRequest(modal, text, {
+          durationSeconds: autoDuration
+            ? undefined
+            : pad.durationSeconds ?? defaultDurationForType(pad.type),
+          autoDuration,
+        }),
+      );
+      if (bytes.byteLength < 200) {
+        throw new Error(`${label} generation failed — audio too small.`);
+      }
+      if (signal.aborted) return;
+
+      update(
+        `Loading ${label} → ${noteName(midiNote)} (${midiNote})`,
+        75 + Math.round((step / total) * 20),
+      );
+      await loadSfxToDrumPad(
+        context,
+        drumRack,
+        midiNote,
+        bytes,
+        importFilename(`elevenlabs-drum-${pad.type}-${midiNote}`, parseAudioOutputFormat(modal.outputFormat)),
+      );
+      loaded++;
+      step++;
+    }
+
     update("Done", 100);
+
+    if (skipped.length) {
+      const skipList = skipped.join(", ");
+      if (loaded === 0) {
+        await showResult(
+          context,
+          "Drum Rack SFX complete",
+          `No pads were loaded — all target pads already had samples (${skipList}). Enable "Overwrite pads" to replace them.`,
+        );
+      } else {
+        await showResult(
+          context,
+          "Drum Rack SFX complete",
+          `Loaded ${loaded} pad(s). Skipped ${skipped.length} (already had samples): ${skipList}. Re-run with "Overwrite pads" to replace them.`,
+        );
+      }
+    }
   });
 }
 

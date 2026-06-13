@@ -6,6 +6,23 @@ Extension release version is defined in `src/version.ts` (`EXTENSION_VERSION`) a
 
 Feature-level versions are tracked in `FEATURE_VERSIONS` inside `src/version.ts` for incremental capability tracking.
 
+<a id="v060"></a>
+
+## [0.6.0] — 2026-06-12
+
+### Added
+
+- **Drum Rack SFX pad-slot modal** — seven configurable pad slots (type dropdown, style phrase, editable characteristics, per-pad auto-duration); **Build entire drum kit** presets types and randomizes phrases; consecutive mapping from **Start pad**
+- **Drum Rack SFX from MIDI clip slot** — **Generate Drum Rack SFX (ElevenLabs)** on Session View MIDI clip slots when the track hosts a Drum Rack
+- **API key onboarding** — paste-and-save modal when no key is configured; validates against ElevenLabs when online
+- **Manage ElevenLabs API Key** — Drum Rack and Audio Track context menus; show/hide saved key, update, or remove `api-key.txt`
+
+### Changed
+
+- **Drum Rack SFX** — unified menu label **Generate Drum Rack SFX (ElevenLabs)**; modal title **Drum Rack SFX**; removed GM mapping, variants/loop, single-pad picker, and auto-load variants modes
+- **Drum kit persistence** — remembers pad layout (type, phrase, duration, enabled) in `elevenlabs-config.json`; characteristics re-derived from type on open
+- **API key resolution** — resolved before progress dialogs; environment variable still takes precedence over saved file
+
 <a id="v050"></a>
 
 ## [0.5.0] — 2026-06-07
