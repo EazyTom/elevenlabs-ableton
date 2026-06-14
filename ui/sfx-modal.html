@@ -48,14 +48,6 @@
       updateDurationLabel();
     }
 
-    function syncLoopModelUi() {
-      const loop = document.getElementById("loop").checked;
-      const model = document.getElementById("modelId");
-      if (loop && model.value !== "eleven_text_to_sound_v2") {
-        model.value = "eleven_text_to_sound_v2";
-      }
-    }
-
     function submit() {
       const text = document.getElementById("text").value.trim();
       const influence = influenceFromSlider();
@@ -71,7 +63,7 @@
         negativePrompt: document.getElementById("negativePrompt").value.trim() || undefined,
         outputFormat: document.getElementById("outputFormat").value,
         loop: document.getElementById("loop").checked,
-        modelId: document.getElementById("modelId").value,
+        modelId: "eleven_text_to_sound_v2",
         variants: Number.isFinite(variants) ? variants : 1,
       });
     }
@@ -82,7 +74,6 @@
       document.getElementById("duration").addEventListener("input", updateDurationLabel);
       document.getElementById("variants").addEventListener("input", updateVariantsLabel);
       document.getElementById("influence").addEventListener("input", updateInfluenceLabel);
-      document.getElementById("loop").addEventListener("change", syncLoopModelUi);
       syncAutoDurationUi();
       updateDurationLabel();
       updateVariantsLabel();
@@ -125,14 +116,6 @@
 
   <label for="negativePrompt">Negative prompt (optional)</label>
   <textarea id="negativePrompt" placeholder="Terms to avoid — distortion, vocals, harsh highs…"></textarea>
-
-  <label class="select-row" for="modelId">
-    <span class="control-label">Model</span>
-    <select id="modelId">
-      <option value="eleven_text_to_sound_v1">SFX v1</option>
-      <option value="eleven_text_to_sound_v2" selected>SFX v2</option>
-    </select>
-  </label>
 
   <label class="select-row" for="outputFormat">
     <span class="control-label">Quality</span>

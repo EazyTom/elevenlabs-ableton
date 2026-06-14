@@ -67,10 +67,36 @@
       return parseInt(document.getElementById("startMidiNote").value, 10);
     }
 
-    function updatePadLabels() {
+    function padMappingModeValue() {
+      return document.getElementById("padMappingMode").value === "gm" ? "gm" : "sequential";
+    }
+
+    function midiNoteForPad(padIndex) {
       const startNote = startMidiNoteValue();
+      if (padMappingModeValue() === "gm") {
+        const typeId = document.getElementById("padType_" + padIndex)?.value ?? "kick";
+        const offset = GM_DRUM_OFFSET_BY_TYPE[typeId] ?? 0;
+        return startNote + offset;
+      }
+      return startNote + padIndex;
+    }
+
+    function maxEnabledMidiNote(pads) {
+      let max = -1;
+      for (const p of pads) {
+        if (!p.enabled) continue;
+        const midi =
+          padMappingModeValue() === "gm"
+            ? startMidiNoteValue() + (GM_DRUM_OFFSET_BY_TYPE[p.type] ?? 0)
+            : startMidiNoteValue() + p.padIndex;
+        max = Math.max(max, midi);
+      }
+      return max;
+    }
+
+    function updatePadLabels() {
       for (let i = 0; i < DRUM_PAD_SLOT_COUNT; i++) {
-        const midi = startNote + i;
+        const midi = midiNoteForPad(i);
         const label = document.getElementById("padLabel_" + i);
         if (label) label.textContent = `Drum Pad ${i + 1} → ${noteName(midi)} (${midi})`;
       }
@@ -92,6 +118,7 @@
 
     function onPadTypeChange(padIndex) {
       applyTypeCharacteristics(padIndex);
+      updatePadLabels();
     }
 
     function onBuildKitChange() {
@@ -107,6 +134,7 @@
           }
           randomizePadPhrase(i);
         }
+        updatePadLabels();
       } else {
         setOnlyFirstPadEnabled();
       }
@@ -138,9 +166,11 @@
       }
 
       const startMidiNote = startMidiNoteValue();
-      const lastEnabled = pads.filter((p) => p.enabled).reduce((max, p) => Math.max(max, p.padIndex), 0);
-      if (startMidiNote + lastEnabled > 127) {
-        setError(`Enabled pads exceed MIDI 127 from ${noteName(startMidiNote)}.`);
+      const padMappingMode = padMappingModeValue();
+      const maxMidi = maxEnabledMidiNote(pads);
+      if (maxMidi > 127) {
+        const modeHint = padMappingMode === "gm" ? "GM mapping" : "sequential pads";
+        setError(`${modeHint} exceed MIDI 127 from root ${noteName(startMidiNote)}.`);
         return;
       }
 
@@ -148,18 +178,20 @@
         cancelled: false,
         pads,
         startMidiNote,
+        padMappingMode,
         kickKey: document.getElementById("kickKey").value.trim() || undefined,
         snareKey: document.getElementById("snareKey").value.trim() || undefined,
         overwriteOccupied: document.getElementById("overwriteOccupied").checked,
         promptInfluence: influenceFromSlider(),
         outputFormat: document.getElementById("outputFormat").value,
-        modelId: document.getElementById("modelId").value,
+        modelId: "eleven_text_to_sound_v2",
       });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("buildDrumKit").addEventListener("change", onBuildKitChange);
       document.getElementById("startMidiNote").addEventListener("change", updatePadLabels);
+      document.getElementById("padMappingMode").addEventListener("change", updatePadLabels);
       document.getElementById("influence").addEventListener("input", updateInfluenceLabel);
 
       for (let i = 0; i < DRUM_PAD_SLOT_COUNT; i++) {
@@ -242,7 +274,7 @@
   </style>
 </head>
 <body>
-  <p>Generate SFX and load into Drum Rack pads. Missing cells get a new Simpler automatically.</p>
+  <p>Generate SFX and load into Drum Rack pads. Missing cells get a new Simpler automatically. Delivery rules (0.25 s lead-in, kit-matched level) are added to every prompt automatically.</p>
 
   <p id="error" class="error" hidden></p>
 
@@ -258,8 +290,11 @@
   </div>
 
   <div class="start-keys-row">
-    <label for="startMidiNote">Start pad
+    <label for="startMidiNote">Root C
       <select id="startMidiNote">{{START_NOTE_OPTIONS}}</select>
+    </label>
+    <label for="padMappingMode">Pad mapping
+      <select id="padMappingMode">{{PAD_MAPPING_MODE_OPTIONS}}</select>
     </label>
     <label for="kickKey">Kick key
       <select id="kickKey">{{KICK_KEY_OPTIONS}}</select>
@@ -281,12 +316,6 @@
   </div>
 
   <div class="stack-column">
-    <label for="modelId">Model
-      <select id="modelId">
-        <option value="eleven_text_to_sound_v1">SFX v1</option>
-        <option value="eleven_text_to_sound_v2" selected>SFX v2</option>
-      </select>
-    </label>
     <label for="outputFormat">Quality
       <select id="outputFormat">
         <option value="mp3_44100_128" selected>MP3 128 kbps (default)</option>

@@ -61,10 +61,8 @@ function buildTtsVoiceSettings(request: TtsRequest) {
   };
 }
 
-export const SFX_MODEL_V1 = "eleven_text_to_sound_v1";
 export const SFX_MODEL_V2 = "eleven_text_to_sound_v2";
-export type SfxModelId = typeof SFX_MODEL_V1 | typeof SFX_MODEL_V2;
-export const DEFAULT_SFX_MODEL: SfxModelId = SFX_MODEL_V2;
+export type SfxModelId = typeof SFX_MODEL_V2;
 
 export interface SfxRequest {
   text: string;
@@ -185,14 +183,12 @@ export async function generateTts(client: ElevenLabsClient, request: TtsRequest)
 }
 
 export async function generateSfx(client: ElevenLabsClient, request: SfxRequest): Promise<Uint8Array> {
-  const modelId =
-    request.loop ? SFX_MODEL_V2 : (request.modelId ?? DEFAULT_SFX_MODEL);
   const stream = await client.textToSoundEffects.convert({
     text: buildSfxApiText(request.text, request.negativePrompt),
     durationSeconds: request.autoDuration ? undefined : request.durationSeconds,
     promptInfluence: request.promptInfluence ?? 0.3,
     loop: request.loop ?? false,
-    modelId,
+    modelId: SFX_MODEL_V2,
     outputFormat: request.outputFormat ?? DEFAULT_AUDIO_OUTPUT_FORMAT,
   });
   return streamToBytes(stream);

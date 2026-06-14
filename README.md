@@ -26,7 +26,7 @@ Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech di
 
 See [CHANGELOG.md](CHANGELOG.md#v060) and [docs/v0.6.0-features.md](docs/v0.6.0-features.md).
 
-- **Drum Rack SFX** — seven pad-slot modal (type, style phrase, characteristics, per-pad auto-duration); Build entire drum kit; MIDI clip slot entry
+- **Drum Rack SFX** — seven pad-slot modal (type, style phrase, characteristics, per-pad auto-duration); Root C + Sequential/GM mapping; Build entire drum kit; MIDI clip slot entry (auto-inserts empty Drum Rack on empty tracks)
 - **API key onboarding** — paste-and-save when no key configured; Manage API Key on Drum Rack and Audio Track with show/hide
 
 ### What's new in v0.5.0
@@ -83,7 +83,7 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 | **Lyrics → MIDI** | Scribe word timestamps → MIDI markers | Audio clip, arrangement selection |
 | **Align lyrics** | Forced alignment with your transcript → MIDI | Audio clip, arrangement selection |
 | **Samples** | TTS / SFX into Simpler | Simpler device |
-| **Drums** | SFX into drum rack — single pad, auto-load variants, or full kit | Drum rack |
+| **Drums** | SFX into drum rack — seven pad slots, Build entire kit, Sequential or GM mapping | Drum rack, MIDI clip slot |
 | **Voice** | Library picker in modals | TTS, voice changer, dialogue |
 | **Clone voice** | Instant voice clone from audio | Audio clip, arrangement selection |
 | **Pronunciation** | Custom word pronunciation for TTS | Audio track (any) |
@@ -109,8 +109,7 @@ Right-click a **clip slot**, **arrangement selection**, or **Simpler** → **Gen
 | **Negative prompt** | Optional terms to avoid; appended to the text prompt as an “Avoid: …” clause. |
 | **Auto duration** | On by default — omits length so the API guesses from the prompt (0.5–30 s). |
 | **Quality** | MP3 bitrates, PCM, or Opus. MP3 192 / PCM need Creator or Pro. |
-| **Model** | **SFX v1** or **SFX v2** (default). Inline row, half-width dropdown. |
-| **Seamless Loop** | Enables loop generation (API uses v2 when loop is on). |
+| **Seamless Loop** | Enables loop generation (SFX v2). |
 
 Imported clips respect the loop toggle (Session clip **Loop** is set in Live when enabled).
 
@@ -138,17 +137,17 @@ The composed prompt merges selected genres, optional tempo, and your description
 
 #### Drum Rack SFX (`Drum Rack` / MIDI clip slot context menu)
 
-Right-click a **Drum Rack** or a **MIDI clip slot** on a track with a Drum Rack → **Generate Drum Rack SFX (ElevenLabs)**. Modal title: **Drum Rack SFX**. Seven pad slots, each with:
+Right-click a **Drum Rack** or a **MIDI clip slot** → **Generate Drum Rack SFX (ElevenLabs)**. On an empty MIDI track (no devices), an empty Drum Rack is inserted automatically. Modal title: **Drum Rack SFX**. Seven pad slots, each with:
 
 | Control | Description |
 |---------|-------------|
-| **Enable** | Default: only Pad 1 enabled (one SFX). |
+| **Enable** | Default: only Pad 1 enabled (not persisted). |
 | **Type** | Kick, Snare, Open Hat, Closed Hat, Rimshot, Perc, Clap, Other. |
-| **Style phrase** | Randomizable mood/style text; per-type phrase banks. |
-| **Characteristics** | Editable one-shot traits (auto-filled per type: minimal silence before transient, etc.). |
+| **Style phrase** | Randomizable mood/style text; 20 phrases per type. |
+| **Characteristics** | Editable sound character (delivery rules added automatically at generation). |
 | **Duration + Auto** | Per-pad duration slider or API auto-duration (default on). |
 
-**Build entire drum kit** enables all 7 pads, presets types, and randomizes style phrases. Pads map **consecutively from Start pad** (default **C1** / MIDI 36). **Kick key** applies to Kick-type pads. **Overwrite occupied** replaces pads that already have samples. Missing Simplers are created automatically. Last pad layout is remembered in `elevenlabs-config.json` (characteristics are re-derived from type on open).
+**Build entire drum kit** enables all 7 pads, presets types, and randomizes style phrases. **Root C** selects the anchor note (C-2 through C3, default C1). **Pad mapping** is **Sequential** (consecutive from root C) or **General MIDI** (GM offsets by drum type). **Kick key** and **Snare key** apply optional pitch character. **Overwrite occupied** replaces pads that already have samples. Uses **SFX v2** only. Missing Simplers are created automatically. Last pad layout (except enable state) is remembered in `elevenlabs-config.json`.
 
 Each enabled pad is a separate ElevenLabs API call (uses credits accordingly).
 
@@ -271,7 +270,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 
 ### Shipped (v0.6.0)
 
-- **Drum Rack SFX** — pad-slot modal, Build entire kit, MIDI clip slot menu  
+- **Drum Rack SFX** — pad-slot modal, Root C, Sequential/GM mapping, Build entire kit, MIDI clip slot menu, SFX v2 only
 - **API key** — onboarding modal, Manage API Key, show/hide saved key  
 
 ### Shipped (v0.5.0)

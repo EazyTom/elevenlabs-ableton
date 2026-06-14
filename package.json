@@ -15,7 +15,8 @@
     "check:build": "tsx scripts/post-build-check.ts --skip-api",
     "check:api": "tsx scripts/post-build-check.ts",
     "check:api:full": "tsx scripts/post-build-check.ts --full",
-    "postbuild": "npm run check:build"
+    "postbuild": "npm run check:build",
+    "publish": "tsx scripts/publish-release.ts"
   },
   "dependencies": {
     "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz",

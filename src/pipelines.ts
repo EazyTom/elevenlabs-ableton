@@ -34,8 +34,9 @@ import {
   type StemVariationId,
 } from "./elevenlabs-client.js";
 import { parseDialogueScript, validateDialogueInput } from "./dialogue.js";
-import { assertPadRange, ensureSimplerOnPad, isDrumPadOccupied } from "./drum-io.js";
+import { ensureSimplerOnPad, isDrumPadOccupied } from "./drum-io.js";
 import {
+  assertEnabledDrumPadsMidiRange,
   defaultDurationForType,
   DRUM_RACK_START_NOTE,
   drumPadMidiNote,
@@ -660,14 +661,14 @@ export async function pipelineDrumRackSfx(
   modal: DrumRackSfxModalResult,
 ): Promise<void> {
   const startNote = drumRackStartNote(modal);
+  const mappingMode = modal.padMappingMode === "gm" ? "gm" : "sequential";
   const enabledPads = (modal.pads ?? []).filter((p) => p.enabled);
   if (!enabledPads.length) {
     await showError(context, "No drum pads are enabled.");
     return;
   }
 
-  const maxPadIndex = enabledPads.reduce((max, p) => Math.max(max, p.padIndex), 0);
-  assertPadRange(startNote, maxPadIndex + 1);
+  assertEnabledDrumPadsMidiRange(enabledPads, startNote, mappingMode);
 
   await withElevenLabsProgress(context, "ElevenLabs Drum Rack SFX", async (client, update, signal) => {
     const skipped: string[] = [];
@@ -680,7 +681,7 @@ export async function pipelineDrumRackSfx(
 
       const drumType = drumTypeById(pad.type);
       const label = drumType?.label ?? pad.type;
-      const midiNote = drumPadMidiNote(pad.padIndex, startNote);
+      const midiNote = drumPadMidiNote(pad.padIndex, startNote, mappingMode, pad.type);
 
       if (!modal.overwriteOccupied && isDrumPadOccupied(drumRack, midiNote)) {
         skipped.push(`${label} (${noteName(midiNote)})`);

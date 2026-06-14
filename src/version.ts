@@ -7,7 +7,7 @@ export const EXTENSION_VERSION = "0.6.0";
 export const FEATURE_VERSIONS = {
   ttsClipSlot: "1.0.0",
   ttsArrangement: "1.0.0",
-  sfx: "1.1.0",
+  sfx: "1.2.0",
   music: "1.1.0",
   batchTts: "1.0.0",
   voiceChanger: "1.0.0",
@@ -18,7 +18,7 @@ export const FEATURE_VERSIONS = {
   postImportFx: "1.0.0",
   voicePicker: "1.0.0",
   dialogue: "1.0.0",
-  drumRackSfx: "1.1.0",
+  drumRackSfx: "1.2.0",
   transcribeToMidi: "1.0.0",
   stemSeparation: "1.0.0",
   voiceClone: "1.0.0",

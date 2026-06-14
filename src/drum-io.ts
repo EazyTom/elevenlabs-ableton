@@ -7,7 +7,10 @@ import { isMidiTrack } from "./sdk-objects.js";
 
 export { DRUM_RACK_START_NOTE } from "./drum-kit.js";
 
-/** Built-in Live device name for an empty Drum Rack (Browser → Drums → Drum Rack). */
+/**
+ * Built-in Live device name for an empty Drum Rack (Browser → Drums → Drum Rack).
+ * Requires manual smoke-test in Live before release if this ever fails at runtime.
+ */
 export const EMPTY_DRUM_RACK_DEVICE = "Drum Rack";
 
 export function findDrumChainByNote(
@@ -63,20 +66,6 @@ export async function ensureSimplerOnPad(
   });
 }
 
-export function assertPadRange(startNote: number, count: number): void {
-  if (startNote < 0 || startNote > 127) {
-    throw new Error(`Start MIDI note must be between 0 and 127 (got ${startNote}).`);
-  }
-  if (count < 1) {
-    throw new Error("At least one pad is required.");
-  }
-  if (startNote + count - 1 > 127) {
-    throw new Error(
-      `${count} consecutive pads from MIDI ${startNote} would exceed MIDI 127.`,
-    );
-  }
-}
-
 /** True when the pad already has a loaded Simpler sample. */
 export function isDrumPadOccupied(drumRack: DrumRack<"1.0.0">, midiNote: number): boolean {
   const simpler = findSimplerOnPad(drumRack, midiNote);
@@ -91,19 +80,6 @@ export function findDrumRackOnTrack(track: { devices: readonly unknown[] }): Dru
     }
   }
   return null;
-}
-
-/** Resolve Drum Rack from a Session View MIDI clip slot (track must host a Drum Rack). */
-export function resolveDrumRackFromClipSlot(
-  context: ExtensionContext,
-  handle: Handle,
-): DrumRack<"1.0.0"> | null {
-  const slot = resolveHandle(context, handle, ClipSlot);
-  const parent = slot.parent;
-  if (!parent || !isMidiTrack(parent)) {
-    return null;
-  }
-  return findDrumRackOnTrack(parent);
 }
 
 /** Insert Ableton's built-in empty Drum Rack at the start of a MIDI track's device chain. */

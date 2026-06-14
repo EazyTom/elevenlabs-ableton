@@ -43,6 +43,7 @@ import {
   DRUM_PITCH_KEY_OPTIONS,
 } from "./drum-kit.js";
 import { parseAudioOutputFormat } from "./audio-output-formats.js";
+import { SFX_MODEL_V2 } from "./elevenlabs-client.js";
 import { clampMusicLengthMs } from "./music-length.js";
 import { buildMusicPromptRandomizerScript, musicForceInstrumental } from "./music-prompt.js";
 import { clampMusicVariants } from "./music-variants.js";
@@ -127,7 +128,7 @@ function buildDrumPadRowsHtml(persisted: StoredDrumKitSettings | undefined): str
     <button type="button" class="pad-randomize" onclick="randomizePadPhrase(${i})">Randomize</button>
   </div>
   <input id="padPhrase_${i}" class="pad-phrase" type="text" value="${phrase}" placeholder="Style or mood phrase" />
-  <textarea id="padCharacteristics_${i}" class="pad-characteristics" rows="2">${characteristics}</textarea>
+  <textarea id="padCharacteristics_${i}" class="pad-characteristics" rows="2" placeholder="Sound character only — timing and level rules are added automatically">${characteristics}</textarea>
   <label class="tempo-row pad-duration-row">
     <span class="control-label">Duration</span>
     <span id="padDurationValue_${i}" class="slider-value">${durationLabel}</span>
@@ -146,6 +147,19 @@ function buildStartNoteOptionsHtml(selected = DRUM_RACK_START_NOTE): string {
   }).join("");
 }
 
+function buildPadMappingModeOptionsHtml(selected: "sequential" | "gm" = "sequential"): string {
+  const options: Array<{ value: "sequential" | "gm"; label: string }> = [
+    { value: "sequential", label: "Sequential" },
+    { value: "gm", label: "General MIDI" },
+  ];
+  return options
+    .map((opt) => {
+      const sel = opt.value === selected ? " selected" : "";
+      return `<option value="${opt.value}"${sel}>${opt.label}</option>`;
+    })
+    .join("");
+}
+
 function buildPitchKeyOptionsHtml(selected = ""): string {
   return DRUM_PITCH_KEY_OPTIONS.map((key) => {
     const label = key ? key : "None";
@@ -159,10 +173,12 @@ function prepareDrumRackSfxModalHtml(
   persisted: StoredDrumKitSettings | undefined,
 ): string {
   const selectedStart = persisted?.startMidiNote ?? DRUM_RACK_START_NOTE;
+  const mappingMode = persisted?.padMappingMode === "gm" ? "gm" : "sequential";
   return template
     .replace(/\{\{DRUM_PAD_RANDOMIZER\}\}/g, buildDrumPadRandomizerScript())
     .replace(/\{\{DRUM_PAD_ROWS\}\}/g, buildDrumPadRowsHtml(persisted))
     .replace(/\{\{START_NOTE_OPTIONS\}\}/g, buildStartNoteOptionsHtml(selectedStart))
+    .replace(/\{\{PAD_MAPPING_MODE_OPTIONS\}\}/g, buildPadMappingModeOptionsHtml(mappingMode))
     .replace(/\{\{KICK_KEY_OPTIONS\}\}/g, buildPitchKeyOptionsHtml(persisted?.kickKey ?? ""))
     .replace(/\{\{SNARE_KEY_OPTIONS\}\}/g, buildPitchKeyOptionsHtml(persisted?.snareKey ?? ""))
     .replace(/\{\{OVERWRITE_CHECKED\}\}/g, persisted?.overwriteOccupied ? " checked" : "");
@@ -190,14 +206,12 @@ function normalizeDrumRackSfxModalResult(parsed: DrumRackSfxModalResult): DrumRa
   return {
     ...parsed,
     startMidiNote: parsed.startMidiNote ?? DRUM_RACK_START_NOTE,
+    padMappingMode: parsed.padMappingMode === "gm" ? "gm" : "sequential",
     pads: normalizeDrumPads(parsed),
     overwriteOccupied: parsed.overwriteOccupied ?? false,
     kickKey: kickKey || undefined,
     snareKey: snareKey || undefined,
-    modelId:
-      parsed.modelId === "eleven_text_to_sound_v1"
-        ? "eleven_text_to_sound_v1"
-        : "eleven_text_to_sound_v2",
+    modelId: SFX_MODEL_V2,
     outputFormat: parseAudioOutputFormat(parsed.outputFormat),
     promptInfluence: parsed.promptInfluence ?? 0.3,
   };
@@ -428,7 +442,7 @@ function normalizeSfxModalResult(parsed: SfxModalResult): SfxModalResult {
     autoDuration,
     durationSeconds: autoDuration ? undefined : parsed.durationSeconds,
     variants: clampSfxVariants(parsed.variants),
-    modelId: parsed.modelId === "eleven_text_to_sound_v1" ? "eleven_text_to_sound_v1" : "eleven_text_to_sound_v2",
+    modelId: SFX_MODEL_V2,
     outputFormat: parseAudioOutputFormat(parsed.outputFormat),
     promptInfluence: parsed.promptInfluence ?? 0.3,
   };
@@ -582,6 +596,7 @@ export async function promptDrumRackSfx(
   const result = normalizeDrumRackSfxModalResult({ ...parsed, pads });
   await saveDrumKitSettings(context.environment.storageDirectory, {
     startMidiNote: result.startMidiNote ?? DRUM_RACK_START_NOTE,
+    padMappingMode: result.padMappingMode ?? "sequential",
     overwriteOccupied: result.overwriteOccupied ?? false,
     kickKey: result.kickKey,
     snareKey: result.snareKey,

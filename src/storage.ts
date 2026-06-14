@@ -31,6 +31,7 @@ export interface StoredDrumPadSettings {
 
 export interface StoredDrumKitSettings {
   startMidiNote: number;
+  padMappingMode?: "sequential" | "gm";
   overwriteOccupied: boolean;
   kickKey?: string;
   snareKey?: string;
@@ -75,6 +76,7 @@ function normalizeStoredDrumKit(raw: Partial<StoredDrumKitSettings> | undefined)
   }
   return {
     startMidiNote: raw.startMidiNote ?? DRUM_RACK_START_NOTE,
+    padMappingMode: raw.padMappingMode === "gm" ? "gm" : "sequential",
     overwriteOccupied: raw.overwriteOccupied ?? false,
     kickKey: raw.kickKey,
     snareKey: raw.snareKey,

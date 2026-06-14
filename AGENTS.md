@@ -165,9 +165,9 @@ Types live in `src/types.ts`. Pipeline reads normalized result only.
 
 ## Drum Rack SFX (v0.6.0 — pad-slot model)
 
-**Menu (consistent naming):** `Generate Drum Rack SFX (ElevenLabs)` on `DrumRack` and MIDI `ClipSlot` (via `resolveDrumRackFromClipSlot` in `drum-io.ts`).
+**Menu (consistent naming):** `Generate Drum Rack SFX (ElevenLabs)` on `DrumRack` and MIDI `ClipSlot` (via `ensureDrumRackFromClipSlot` in `drum-io.ts` — auto-inserts empty Drum Rack when track has no devices).
 
-**Feature version:** `drumRackSfx: "1.1.0"` in `FEATURE_VERSIONS`.
+**Feature version:** `drumRackSfx: "1.2.0"` in `FEATURE_VERSIONS`.
 
 ### Architecture (no legacy modes)
 
@@ -182,46 +182,51 @@ extension.ts → promptDrumRackSfx → pipelineDrumRackSfx → generateSfx per p
 | Export | Purpose |
 |--------|---------|
 | `DRUM_TYPES` | 8 selectable types: kick, snare, openHat, closedHat, rimshot, perc, clap, other |
-| `DRUM_TYPE_STYLE_BANKS` | Per-type random phrase lists (16 phrases each) |
-| `defaultCharacteristicsForType()` | One-shot SFX traits (includes “minimal silence before transient”) |
+| `DRUM_TYPE_STYLE_BANKS` | Per-type random phrase lists (20 phrases each) |
+| `defaultCharacteristicsForType()` | Sound character per type (delivery rules appended separately) |
+| `DRUM_PAD_SAMPLE_CONSTRAINTS` / `DRUM_PAD_AVOID_TERMS` | Shared 0.25 s lead-in, kit level, avoid clause |
 | `DEFAULT_KIT_TYPE_BY_PAD` | 7 types for “Build entire kit” preset |
+| `GM_DRUM_OFFSET_BY_TYPE` | GM offsets from root C when pad mapping is GM |
 | `DRUM_PAD_SLOT_COUNT` | `7` |
-| `resolveDrumPadPrompt(style, characteristics, typeId, kickKey?)` | `"style, characteristics"` + optional `tuned to {key}` for kick |
-| `drumPadMidiNote(padIndex, startNote)` | Consecutive MIDI note mapping |
+| `resolveDrumPadPrompt(style, characteristics, typeId, pitchKey?)` | style + characteristics + constraints + avoid; pitch key for kick/snare |
+| `drumPadMidiNote(padIndex, startNote, mode, typeId?)` | Sequential or GM MIDI note |
+| `assertEnabledDrumPadsMidiRange()` | Range + GM duplicate-note guard |
 | `buildDrumPadRandomizerScript()` | Injected into modal webview |
 
-**Prompt assembly:** user style phrase + editable characteristics (suffix baked into characteristics field, not shown as separate locked line). Kick key is global, applied only when pad `type === "kick"`.
+**Prompt assembly:** user style phrase + editable characteristics + shared delivery constraints. Kick/snare key applied when pad type matches. Avoid clause via `buildSfxApiText`.
 
 ### Modal behavior (`ui/drum-rack-sfx-modal.html`)
 
-- **Default:** only Pad 1 enabled (`buildDrumPadRowsHtml`: `enabled ?? i === 0`).
+- **Default:** only Pad 1 enabled on open (enable state **not** persisted).
 - **Build entire drum kit:** enables all 7, sets types from `DEFAULT_KIT_TYPE_BY_PAD`, calls `randomizePadPhrase(i)` each.
+- **Root C:** C-2 through C3 (default C1). **Pad mapping:** Sequential or General MIDI.
+- **Kick key / Snare key:** optional pitch character dropdowns.
 - **Type change:** `applyTypeCharacteristics(padIndex)` refills characteristics textarea from injected map.
 - **Duration slider:** `min=1 max=60 step=1` → seconds = value/2 (0.5s grid). Auto checkbox disables slider, shows “Auto”.
-- **Submit:** `collectPads()` → `{ pads, startMidiNote, kickKey, overwriteOccupied, modelId, outputFormat, promptInfluence }`.
+- **Submit:** `collectPads()` → `{ pads, startMidiNote, padMappingMode, kickKey, snareKey, overwriteOccupied, modelId, outputFormat, promptInfluence }`.
 
 ### Persistence — `storage.ts` / `elevenlabs-config.json`
 
 On successful generate, `promptDrumRackSfx` saves via `saveDrumKitSettings`:
 
-- **Saved:** padIndex, type, stylePhrase, durationSeconds, enabled, autoDuration, startMidiNote, overwriteOccupied, kickKey
-- **Not saved:** characteristics (re-derived from type default on open and on type-change in webview)
+- **Saved:** padIndex, type, stylePhrase, durationSeconds, autoDuration, startMidiNote, padMappingMode, overwriteOccupied, kickKey, snareKey
+- **Not saved:** enabled (always Pad 1 on open), characteristics (re-derived from type default on open and on type-change in webview)
 - **Migration:** `normalizeStoredDrumKit()` accepts legacy `id` / `promptPrefix` fields from pre-v0.6 configs
 
 ### Pipeline — `pipelineDrumRackSfx`
 
 For each **enabled** pad in `modal.pads`:
 
-1. `midiNote = startNote + padIndex`
+1. `midiNote = drumPadMidiNote(padIndex, startNote, padMappingMode, pad.type)`
 2. Skip if occupied and `!overwriteOccupied` (track in `skipped[]`, `showResult` summary)
-3. `resolveDrumPadPrompt` → `generateSfx` with per-pad `autoDuration` / `durationSeconds`
+3. `resolveDrumPadPrompt` → `generateSfx` (SFX v2 only) with per-pad `autoDuration` / `durationSeconds`
 4. `loadSfxToDrumPad` → creates chain + Simpler if missing
 
-**Removed code (do not reintroduce):** `listPadsWithSimpler`, GM map (`useGmMap`), `generateDrumRackVariants`, auto-load variants, single-pad Simpler requirement.
+**Removed code (do not reintroduce):** `listPadsWithSimpler`, `generateDrumRackVariants`, auto-load variants, single-pad Simpler requirement.
 
 ### Tests
 
-`scripts/post-build-check.ts`: `resolveDrumPadPrompt`, `DRUM_TYPE_STYLE_BANKS`, `DEFAULT_KIT_TYPE_BY_PAD`, `drumPadMidiNote`, `findDrumRackOnTrack`, storage round-trip.
+`scripts/post-build-check.ts`: bundle integrity + behavioral smoke (dialogue, clamps, drum-prompt, drum-mapping incl. GM duplicate guard, storage round-trip).
 
 Spec: [docs/v0.6.0-features.md](docs/v0.6.0-features.md).
 

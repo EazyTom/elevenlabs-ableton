@@ -18,7 +18,7 @@ export interface SfxModalResult {
   negativePrompt?: string;
   outputFormat?: string;
   loop?: boolean;
-  modelId?: "eleven_text_to_sound_v1" | "eleven_text_to_sound_v2";
+  modelId?: "eleven_text_to_sound_v2";
   /** Number of generations to create (1–10); user picks one when > 1. */
   variants?: number;
 }
@@ -80,9 +80,11 @@ export interface DrumRackSfxModalResult {
   cancelled?: boolean;
   promptInfluence?: number;
   outputFormat?: string;
-  modelId?: "eleven_text_to_sound_v1" | "eleven_text_to_sound_v2";
-  /** First pad MIDI note (default 36 = C1). */
+  modelId?: "eleven_text_to_sound_v2";
+  /** Root C MIDI note (default 36 = C1). Used as sequential start or GM anchor. */
   startMidiNote?: number;
+  /** Sequential pads from root C, or GM offsets by drum type. */
+  padMappingMode?: "sequential" | "gm";
   pads?: DrumPadConfig[];
   overwriteOccupied?: boolean;
   /** Musical key for kick pitch character (e.g. "F", "C#"). */
