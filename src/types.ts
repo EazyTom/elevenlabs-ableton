@@ -2,6 +2,7 @@ export interface TextVoiceModalResult {
   cancelled?: boolean;
   text?: string;
   voiceId?: string;
+  modelId?: "eleven_flash_v2_5" | "eleven_v3";
   /** TTS voice settings (ElevenLabs voice_settings). */
   speed?: number;
   stability?: number;
@@ -47,14 +48,28 @@ export interface MusicModalResult {
   negativePrompt?: string;
   outputFormat?: string;
   modelId?: "music_v1" | "music_v2";
+  /** Optional seed for composition-plan generation (music v2). */
+  seed?: number;
   /** Number of generations to create (1–10); user picks one when > 1. */
   variants?: number;
 }
 
-export interface ImportClipArgs {
-  startTime?: number;
-  duration?: number;
-  isWarped?: boolean;
+export type MusicInpaintMode = "extend" | "regenerate" | "loop" | "similar";
+
+export interface MusicInpaintModalResult {
+  cancelled?: boolean;
+  mode?: MusicInpaintMode;
+  styles?: string;
+  introSec?: number;
+  outroSec?: number;
+  regenStartSec?: number;
+  regenEndSec?: number;
+  regenText?: string;
+  sliceStartSec?: number;
+  sliceEndSec?: number;
+  glueSec?: number;
+  prompt?: string;
+  durationSec?: number;
 }
 
 export interface DialogueModalResult {

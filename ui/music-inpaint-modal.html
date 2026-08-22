@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{TITLE}}</title>
+  <script>
+    const MODE = "{{MODE}}";
+    const DEFAULT_DURATION_SEC = {{DEFAULT_DURATION_SEC}};
+
+    function doSendMessage(message) {
+      if (window.webkit?.messageHandlers?.live) window.webkit.messageHandlers.live.postMessage(message);
+      else if (window.chrome?.webview) window.chrome.webview.postMessage(message);
+    }
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+    function num(id) { return parseFloat(document.getElementById(id).value); }
+    function submit() {
+      closeWithResult({
+        cancelled: false,
+        mode: MODE,
+        styles: document.getElementById("styles").value.trim(),
+        introSec: document.getElementById("introSec") ? num("introSec") : undefined,
+        outroSec: document.getElementById("outroSec") ? num("outroSec") : undefined,
+        regenStartSec: document.getElementById("regenStartSec") ? num("regenStartSec") : undefined,
+        regenEndSec: document.getElementById("regenEndSec") ? num("regenEndSec") : undefined,
+        regenText: document.getElementById("regenText")?.value.trim() || undefined,
+        sliceStartSec: document.getElementById("sliceStartSec") ? num("sliceStartSec") : undefined,
+        sliceEndSec: document.getElementById("sliceEndSec") ? num("sliceEndSec") : undefined,
+        glueSec: document.getElementById("glueSec") ? num("glueSec") : undefined,
+        prompt: document.getElementById("prompt")?.value.trim() || undefined,
+        durationSec: document.getElementById("durationSec") ? num("durationSec") : undefined,
+      });
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWithResult({ cancelled: true }); });
+    });
+  </script>
+  <style>
+    body { gap: 0.65em; overflow-y: auto; }
+    .hint { font-size: 0.95em; }
+  </style>
+</head>
+<body>
+  <p class="hint">Music inpainting uses credits for the full output duration (including kept audio). Requires Music v2.</p>
+  {{FIELDS}}
+  <label for="styles">Styles (comma-separated)</label>
+  <input id="styles" type="text" placeholder="electronic, 120 BPM, dark, instrumental" />
+  <div class="buttons">
+    <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
+    <button type="button" class="primary" onclick="submit()">Generate</button>
+  </div>
+</body>
+</html>

@@ -2,13 +2,13 @@
  * Extension versioning — bump EXTENSION_VERSION on each release.
  * Feature versions track when individual capabilities were introduced or changed.
  */
-export const EXTENSION_VERSION = "0.6.0";
+export const EXTENSION_VERSION = "0.7.0";
 
 export const FEATURE_VERSIONS = {
   ttsClipSlot: "1.0.0",
   ttsArrangement: "1.0.0",
   sfx: "1.2.0",
-  music: "1.1.0",
+  music: "1.3.0",
   batchTts: "1.0.0",
   voiceChanger: "1.0.0",
   vocalIsolation: "1.1.0",
@@ -24,6 +24,12 @@ export const FEATURE_VERSIONS = {
   voiceClone: "1.0.0",
   forcedAlignmentMidi: "1.0.0",
   pronunciationDictionary: "1.0.0",
+  ttsModelPicker: "1.0.0",
+  musicInpainting: "1.0.0",
+  musicExtend: "1.0.0",
+  musicRegenerate: "1.0.0",
+  musicLoop: "1.0.0",
+  musicSimilar: "1.0.0",
 } as const;
 
 export type FeatureId = keyof typeof FEATURE_VERSIONS;
@@ -48,6 +54,12 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   voiceClone: "Instant Voice Clone from Live Audio",
   forcedAlignmentMidi: "Forced Alignment → MIDI Lyrics",
   pronunciationDictionary: "Pronunciation Dictionary Manager",
+  ttsModelPicker: "TTS Model Picker (Flash / Eleven v3)",
+  musicInpainting: "Music Inpainting (music_v2)",
+  musicExtend: "Extend Music (inpainting)",
+  musicRegenerate: "Regenerate Section (inpainting)",
+  musicLoop: "Make Seamless Loop (inpainting)",
+  musicSimilar: "Generate Similar Music (inpainting)",
 };
 
 export function logExtensionInfo(): void {

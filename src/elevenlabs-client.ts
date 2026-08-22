@@ -2,12 +2,15 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { createReadStream } from "fs";
 import path from "path";
 
-import { postJsonBinary, postMultipart, readAudioUpload } from "./multipart-upload.js";
+import { postMultipart, postMultipartJson, readAudioUpload } from "./multipart-upload.js";
 import {
   DEFAULT_AUDIO_OUTPUT_FORMAT,
+  DEFAULT_MUSIC_OUTPUT_FORMAT,
   type AudioOutputFormat,
+  type MusicOutputFormat,
 } from "./audio-output-formats.js";
-import { buildMusicCompositionPlan } from "./music-prompt.js";
+import { buildMusicV1CompositionPlan, buildMusicV2CompositionPlan } from "./music-prompt.js";
+import type { MusicV2CompositionPlan } from "./music-inpainting.js";
 import { tryResolveApiKey } from "./api-key.js";
 import {
   clampMusicLengthMs,
@@ -18,6 +21,7 @@ const CLIENT_API_KEY = Symbol.for("elevenlabs-ableton.apiKey");
 
 export const DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
 export const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
+export const ELEVEN_V3_MODEL_ID = "eleven_v3";
 export const STS_MODEL_ID = "eleven_multilingual_sts_v2";
 export const STT_MODEL_ID = "scribe_v2";
 
@@ -78,7 +82,7 @@ export interface SfxRequest {
 export const MUSIC_MODEL_V1 = "music_v1";
 export const MUSIC_MODEL_V2 = "music_v2";
 export type MusicModelId = typeof MUSIC_MODEL_V1 | typeof MUSIC_MODEL_V2;
-export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V1;
+export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V2;
 
 export interface MusicRequest {
   prompt: string;
@@ -89,7 +93,10 @@ export interface MusicRequest {
   loop?: boolean;
   promptInfluence?: number;
   negativePrompt?: string;
-  outputFormat?: AudioOutputFormat;
+  outputFormat?: MusicOutputFormat;
+  /** Only honored when a composition plan is sent (spec forbids seed with prompt). */
+  seed?: number;
+  storeForInpainting?: boolean;
 }
 
 export interface VoiceSummary {
@@ -117,6 +124,76 @@ export interface AlignedWord {
 
 export type StemVariationId = "two_stems_v1" | "six_stems_v1";
 
+export interface MusicGenerationResult {
+  bytes: Uint8Array;
+  songId?: string;
+  words?: TranscribedWord[];
+  viaDetailed: boolean;
+}
+
+function buildMusicComposeBody(request: MusicRequest): {
+  modelId: MusicModelId;
+  outputFormat: MusicOutputFormat;
+  storeForInpainting?: boolean;
+  withTimestamps?: boolean;
+  compositionPlan?: ReturnType<typeof buildMusicV1CompositionPlan> | ReturnType<typeof buildMusicV2CompositionPlan> | MusicV2CompositionPlan;
+  respectSectionsDurations?: boolean;
+  seed?: number;
+  prompt?: string;
+  forceInstrumental?: boolean;
+  musicLengthMs?: number;
+} {
+  const modelId = request.modelId ?? DEFAULT_MUSIC_MODEL;
+  const outputFormat = request.outputFormat ?? DEFAULT_MUSIC_OUTPUT_FORMAT;
+  const negativeTerms = parseNegativePromptTerms(request.negativePrompt);
+  const durationMs = request.autoDuration
+    ? undefined
+    : clampMusicLengthMs(request.musicLengthMs);
+  const useCompositionPlan = negativeTerms.length > 0 && durationMs !== undefined;
+
+  const body: ReturnType<typeof buildMusicComposeBody> = {
+    modelId,
+    outputFormat,
+    storeForInpainting: request.storeForInpainting,
+    ...(request.storeForInpainting && { withTimestamps: true }),
+  };
+
+  if (useCompositionPlan) {
+    body.compositionPlan =
+      modelId === MUSIC_MODEL_V1
+        ? buildMusicV1CompositionPlan(
+            request.prompt,
+            negativeTerms,
+            durationMs,
+            { forceInstrumental: request.forceInstrumental },
+          )
+        : buildMusicV2CompositionPlan(
+            request.prompt,
+            negativeTerms,
+            durationMs,
+            { forceInstrumental: request.forceInstrumental },
+          );
+    if (modelId === MUSIC_MODEL_V1) {
+      body.respectSectionsDurations = false;
+    }
+    if (request.seed !== undefined) {
+      body.seed = request.seed;
+    }
+  } else {
+    let prompt = request.prompt;
+    if (negativeTerms.length > 0) {
+      prompt = `${prompt}. Avoid: ${negativeTerms.join(", ")}`;
+    }
+    body.prompt = prompt;
+    body.forceInstrumental = request.forceInstrumental ?? false;
+    if (durationMs !== undefined) {
+      body.musicLengthMs = durationMs;
+    }
+  }
+
+  return body;
+}
+
 export async function resolveApiKey(storageDirectory: string | undefined): Promise<string> {
   const key = await tryResolveApiKey(storageDirectory);
   if (key) return key;
@@ -130,6 +207,48 @@ export function createClient(apiKey: string): ElevenLabsClient {
   const client = new ElevenLabsClient({ apiKey });
   (client as ElevenLabsClient & { [CLIENT_API_KEY]?: string })[CLIENT_API_KEY] = apiKey;
   return client;
+}
+
+interface DetailedMusicJson {
+  wordsTimestamps?: Array<{ word: string; startMs: number; endMs: number }>;
+  words_timestamps?: Array<{ word: string; start_ms: number; end_ms: number }>;
+}
+
+type MusicClientWrapper = {
+  compose(request?: Record<string, unknown>): {
+    withRawResponse(): Promise<{ data: ReadableStream<Uint8Array>; rawResponse: { headers: { get(name: string): string | null } } }>;
+    then(onfulfilled?: (value: ReadableStream<Uint8Array>) => unknown): Promise<ReadableStream<Uint8Array>>;
+  };
+  composeDetailed(request?: Record<string, unknown>): Promise<{
+    audio: Buffer | Uint8Array;
+    songId?: string;
+    json?: DetailedMusicJson;
+  }>;
+};
+
+function extractMusicWordTimestamps(json?: DetailedMusicJson): TranscribedWord[] | undefined {
+  if (!json) return undefined;
+  const raw = json.wordsTimestamps ?? json.words_timestamps;
+  if (!raw?.length) return undefined;
+
+  const words: TranscribedWord[] = [];
+  for (const entry of raw) {
+    const word = entry.word?.trim();
+    if (!word) continue;
+    const startMs = "startMs" in entry ? entry.startMs : entry.start_ms;
+    const endMs = "endMs" in entry ? entry.endMs : entry.end_ms;
+    words.push({
+      text: word,
+      start: startMs / 1000,
+      end: endMs / 1000,
+      type: "word",
+    });
+  }
+  return words.length ? words : undefined;
+}
+
+function musicClient(client: ElevenLabsClient): MusicClientWrapper {
+  return client.music as unknown as MusicClientWrapper;
 }
 
 function clientApiKey(client: ElevenLabsClient): string {
@@ -195,47 +314,102 @@ export async function generateSfx(client: ElevenLabsClient, request: SfxRequest)
 }
 
 export async function generateMusic(client: ElevenLabsClient, request: MusicRequest): Promise<Uint8Array> {
-  const outputFormat = request.outputFormat ?? DEFAULT_AUDIO_OUTPUT_FORMAT;
-  const negativeTerms = parseNegativePromptTerms(request.negativePrompt);
-  const durationMs = request.autoDuration
-    ? undefined
-    : clampMusicLengthMs(request.musicLengthMs);
-  // Composition plans need explicit section timing; auto duration uses prompt + avoid clause.
-  const useCompositionPlan = negativeTerms.length > 0 && durationMs !== undefined;
+  const result = await generateMusicWithMetadata(client, request);
+  return result.bytes;
+}
 
-  const body: Record<string, unknown> = {
-    model_id: request.modelId ?? DEFAULT_MUSIC_MODEL,
-    generation_mode: request.loop ? "loop" : "track",
+export async function generateMusicWithMetadata(
+  client: ElevenLabsClient,
+  request: MusicRequest,
+): Promise<MusicGenerationResult> {
+  const body = buildMusicComposeBody(request);
+
+  if (request.storeForInpainting) {
+    try {
+      const detailed = await musicClient(client).composeDetailed(body);
+      return {
+        bytes: new Uint8Array(detailed.audio),
+        songId: detailed.songId,
+        words: extractMusicWordTimestamps(detailed.json),
+        viaDetailed: true,
+      };
+    } catch {
+      // Fall back to plain compose + response header song-id.
+    }
+  }
+
+  const responsePromise = musicClient(client).compose(body);
+  if (request.storeForInpainting) {
+    const { data: stream, rawResponse } = await responsePromise.withRawResponse();
+    const bytes = await streamToBytes(stream);
+    const songId = rawResponse.headers.get("song-id") ?? undefined;
+    return { bytes, songId, viaDetailed: false };
+  }
+
+  const stream = await responsePromise;
+  return { bytes: await streamToBytes(stream), viaDetailed: false };
+}
+
+export async function composeInpaintingMusic(
+  client: ElevenLabsClient,
+  plan: MusicV2CompositionPlan,
+  options?: { outputFormat?: MusicOutputFormat; storeForInpainting?: boolean },
+): Promise<MusicGenerationResult> {
+  const body = {
+    modelId: "music_v2",
+    outputFormat: options?.outputFormat ?? DEFAULT_MUSIC_OUTPUT_FORMAT,
+    compositionPlan: plan,
+    storeForInpainting: options?.storeForInpainting,
   };
 
-  if (request.promptInfluence !== undefined) {
-    body.prompt_influence = request.promptInfluence;
+  if (options?.storeForInpainting) {
+    try {
+      const detailed = await musicClient(client).composeDetailed(body);
+      return {
+        bytes: new Uint8Array(detailed.audio),
+        songId: detailed.songId,
+        words: extractMusicWordTimestamps(detailed.json),
+        viaDetailed: true,
+      };
+    } catch {
+      // fallback below
+    }
+    const { data: stream, rawResponse } = await musicClient(client).compose(body).withRawResponse();
+    return {
+      bytes: await streamToBytes(stream),
+      songId: rawResponse.headers.get("song-id") ?? undefined,
+      viaDetailed: false,
+    };
   }
 
-  if (useCompositionPlan) {
-    body.composition_plan = buildMusicCompositionPlan(
-      request.prompt,
-      negativeTerms,
-      durationMs,
-      { forceInstrumental: request.forceInstrumental },
-    );
-    body.respect_sections_durations = false;
-    body.music_length_ms = durationMs;
-  } else {
-    let prompt = request.prompt;
-    if (negativeTerms.length > 0) {
-      prompt = `${prompt}. Avoid: ${negativeTerms.join(", ")}`;
-    }
-    body.prompt = prompt;
-    body.force_instrumental = request.forceInstrumental ?? false;
-    if (durationMs !== undefined) {
-      body.music_length_ms = durationMs;
-    }
-  }
+  const stream = await musicClient(client).compose(body);
+  return { bytes: await streamToBytes(stream), viaDetailed: false };
+}
 
-  return postJsonBinary(clientApiKey(client), "/v1/music", body, {
-    output_format: outputFormat,
-  });
+export async function uploadMusicForInpainting(
+  client: ElevenLabsClient,
+  audioPath: string,
+): Promise<{ songId: string }> {
+  const upload = await readAudioUpload(audioPath);
+
+  const response = await postMultipartJson<{ song_id?: string; songId?: string }>(
+    clientApiKey(client),
+    "/v1/music/upload",
+    {
+      files: [{
+        name: "file",
+        filename: upload.filename,
+        contentType: upload.contentType,
+        data: upload.data,
+      }],
+    },
+  );
+
+  const songId = response.songId ?? response.song_id;
+  if (!songId) {
+    throw new Error("Music upload did not return a song ID.");
+  }
+  return { songId };
 }
 
 export async function convertVoice(

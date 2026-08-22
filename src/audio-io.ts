@@ -39,7 +39,7 @@ export async function importAndCreateClip(
   sourcePath: string,
   args: ImportClipArgs,
   target: ClipSlot<"1.0.0"> | AudioTrack<"1.0.0"> | TakeLane<"1.0.0">,
-): Promise<void> {
+): Promise<string> {
   const imported = await context.resources.importIntoProject(sourcePath);
   const isWarped = args.isWarped ?? false;
 
@@ -62,6 +62,8 @@ export async function importAndCreateClip(
   if (args.looping) {
     clip.looping = true;
   }
+
+  return imported;
 }
 
 export async function replaceSimplerSample(

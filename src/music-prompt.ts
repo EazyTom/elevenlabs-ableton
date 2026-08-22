@@ -58,8 +58,11 @@ export function musicForceInstrumental(modal: MusicModalResult): boolean {
   return modal.genres?.includes("instrumental") ?? false;
 }
 
-/** Merge modal genres, tempo, and free text into one ElevenLabs music prompt. */
-export function buildMusicPrompt(modal: MusicModalResult): string {
+/** Merge modal genres, tempo, key/scale, and free text into one ElevenLabs music prompt. */
+export function buildMusicPrompt(
+  modal: MusicModalResult,
+  songContext?: { rootNote?: number; scaleName?: string },
+): string {
   const parts: string[] = [];
 
   for (const key of modal.genres ?? []) {
@@ -71,6 +74,15 @@ export function buildMusicPrompt(modal: MusicModalResult): string {
     parts.push(`${Math.round(modal.tempoBpm)} BPM`);
   }
 
+  if (songContext?.rootNote !== undefined && Number.isFinite(songContext.rootNote)) {
+    const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const name = noteNames[((Math.round(songContext.rootNote) % 12) + 12) % 12];
+    if (name) {
+      const scale = songContext.scaleName?.trim();
+      parts.push(scale ? `${name} ${scale.toLowerCase()}` : name);
+    }
+  }
+
   if (modal.prompt?.trim()) parts.push(modal.prompt.trim());
 
   return parts.join(", ") || "electronic music";
@@ -79,27 +91,37 @@ export function buildMusicPrompt(modal: MusicModalResult): string {
 const MIN_SECTION_MS = 3_000;
 const MAX_SECTION_MS = 120_000;
 
-function musicSectionsForDuration(durationMs: number): Array<Record<string, unknown>> {
+function musicSectionsForDuration(durationMs: number): Array<{
+  sectionName: string;
+  positiveLocalStyles: string[];
+  negativeLocalStyles: string[];
+  durationMs: number;
+  lines: string[];
+}> {
   const total = Math.max(MIN_SECTION_MS, durationMs);
   const sectionCount = Math.ceil(total / MAX_SECTION_MS);
   const sectionDuration = Math.ceil(total / sectionCount);
 
   return Array.from({ length: sectionCount }, (_, index) => ({
-    section_name: sectionCount === 1 ? "Main" : `Section ${index + 1}`,
-    positive_local_styles: [] as string[],
-    negative_local_styles: [] as string[],
-    duration_ms: sectionDuration,
+    sectionName: sectionCount === 1 ? "Main" : `Section ${index + 1}`,
+    positiveLocalStyles: [] as string[],
+    negativeLocalStyles: [] as string[],
+    durationMs: sectionDuration,
     lines: [] as string[],
   }));
 }
 
-/** Build a composition plan when the user supplies negative styles. */
-export function buildMusicCompositionPlan(
+/** Build a music_v1 composition plan when the user supplies negative styles. */
+export function buildMusicV1CompositionPlan(
   positivePrompt: string,
   negativeTerms: string[],
   durationMs: number,
   options?: { forceInstrumental?: boolean },
-): Record<string, unknown> {
+): {
+  positiveGlobalStyles: string[];
+  negativeGlobalStyles: string[];
+  sections: ReturnType<typeof musicSectionsForDuration>;
+} {
   const positiveStyles = positivePrompt
     .split(/,\s*/)
     .map((part) => part.trim())
@@ -113,9 +135,71 @@ export function buildMusicCompositionPlan(
   }
 
   return {
-    positive_global_styles: positiveStyles.length ? positiveStyles : ["electronic music"],
-    negative_global_styles: negativeStyles,
+    positiveGlobalStyles: positiveStyles.length ? positiveStyles : ["electronic music"],
+    negativeGlobalStyles: negativeStyles,
     sections: musicSectionsForDuration(durationMs),
+  };
+}
+
+/** Build a music_v2 chunk plan when the user supplies negative styles. */
+export function buildMusicV2CompositionPlan(
+  positivePrompt: string,
+  negativeTerms: string[],
+  durationMs: number,
+  options?: { forceInstrumental?: boolean },
+): {
+  chunks: Array<{
+    text: string;
+    durationMs: number;
+    positiveStyles: string[];
+    negativeStyles: string[];
+    contextAdherence: "high";
+  }>;
+} {
+  const positiveStyles = positivePrompt
+    .split(/,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const negativeStyles = [...negativeTerms];
+  if (options?.forceInstrumental) {
+    for (const term of ["vocals", "singing", "lyrics"]) {
+      if (!negativeStyles.includes(term)) negativeStyles.push(term);
+    }
+  }
+
+  const styles = positiveStyles.length ? positiveStyles : ["electronic music"];
+  const sections = musicSectionsForDuration(durationMs);
+
+  return {
+    chunks: sections.map((section) => ({
+      text: `[${section.sectionName}]`,
+      durationMs: section.durationMs,
+      positiveStyles: styles,
+      negativeStyles,
+      contextAdherence: "high" as const,
+    })),
+  };
+}
+
+/** @deprecated Use buildMusicV1CompositionPlan — kept for tests referencing snake_case REST shape. */
+export function buildMusicCompositionPlan(
+  positivePrompt: string,
+  negativeTerms: string[],
+  durationMs: number,
+  options?: { forceInstrumental?: boolean },
+): Record<string, unknown> {
+  const plan = buildMusicV1CompositionPlan(positivePrompt, negativeTerms, durationMs, options);
+  return {
+    positive_global_styles: plan.positiveGlobalStyles,
+    negative_global_styles: plan.negativeGlobalStyles,
+    sections: plan.sections.map((s) => ({
+      section_name: s.sectionName,
+      positive_local_styles: s.positiveLocalStyles,
+      negative_local_styles: s.negativeLocalStyles,
+      duration_ms: s.durationMs,
+      lines: s.lines,
+    })),
   };
 }
 

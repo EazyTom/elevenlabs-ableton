@@ -21,6 +21,7 @@ import {
   type ExtensionContext,
 } from "./live-selection.js";
 import { ensureDrumRackFromClipSlot } from "./drum-io.js";
+import { COMMANDS, registerContextMenus } from "./menu-registry.js";
 import {
   importGeneratedAudio,
   pipelineAlignToMidi,
@@ -28,6 +29,7 @@ import {
   pipelineDialogue,
   pipelineDrumRackSfx,
   pipelineMusic,
+  pipelineMusicInpaint,
   pipelinePronunciationRule,
   pipelineSfx,
   pipelineSimplerSfx,
@@ -42,6 +44,7 @@ import {
   pipelineVoiceChanger,
   withElevenLabsProgress,
 } from "./pipelines.js";
+import { isAudioTrack, isClipSlot } from "./sdk-objects.js";
 import {
   promptAlignLyrics,
   promptCloneVoice,
@@ -49,6 +52,7 @@ import {
   promptDrumRackSfx,
   promptManageApiKey,
   promptMusic,
+  promptMusicInpaint,
   showError,
   promptPronunciationRule,
   promptSfx,
@@ -59,41 +63,8 @@ import {
 } from "./ui.js";
 import { DEFAULT_VOICE_ID, generateTts } from "./elevenlabs-client.js";
 import { getActivePronunciationDictionary, loadStorageConfig } from "./storage.js";
+import type { MusicInpaintMode } from "./types.js";
 import { EXTENSION_VERSION, logExtensionInfo } from "./version.js";
-
-const NS = "elevenlabs-ableton";
-
-const COMMANDS = {
-  ttsClipSlot: `${NS}.ttsClipSlot`,
-  ttsArrangement: `${NS}.ttsArrangement`,
-  sfxClipSlot: `${NS}.sfxClipSlot`,
-  sfxArrangement: `${NS}.sfxArrangement`,
-  musicClipSlot: `${NS}.musicClipSlot`,
-  musicArrangement: `${NS}.musicArrangement`,
-  batchTts: `${NS}.batchTts`,
-  voiceChanger: `${NS}.voiceChanger`,
-  vocalIsolation: `${NS}.vocalIsolation`,
-  vocalIsolationClipSlot: `${NS}.vocalIsolationClipSlot`,
-  vocalIsolationClip: `${NS}.vocalIsolationClip`,
-  transcribeClip: `${NS}.transcribeClip`,
-  transcribeArrangement: `${NS}.transcribeArrangement`,
-  simplerTts: `${NS}.simplerTts`,
-  simplerSfx: `${NS}.simplerSfx`,
-  dialogueClipSlot: `${NS}.dialogueClipSlot`,
-  dialogueArrangement: `${NS}.dialogueArrangement`,
-  drumRackSfx: `${NS}.drumRackSfx`,
-  drumRackSfxClipSlot: `${NS}.drumRackSfxClipSlot`,
-  manageApiKey: `${NS}.manageApiKey`,
-  transcribeToMidiClip: `${NS}.transcribeToMidiClip`,
-  transcribeToMidiArrangement: `${NS}.transcribeToMidiArrangement`,
-  alignToMidiClip: `${NS}.alignToMidiClip`,
-  alignToMidiArrangement: `${NS}.alignToMidiArrangement`,
-  cloneVoiceClip: `${NS}.cloneVoiceClip`,
-  cloneVoiceArrangement: `${NS}.cloneVoiceArrangement`,
-  stemSeparationClip: `${NS}.stemSeparationClip`,
-  stemSeparationArrangement: `${NS}.stemSeparationArrangement`,
-  pronunciationRule: `${NS}.pronunciationRule`,
-} as const;
 
 function runSafe(fn: () => Promise<void>): void {
   void fn().catch((err) => console.error(`[elevenlabs-ableton v${EXTENSION_VERSION}]`, err));
@@ -103,43 +74,77 @@ function register(context: ExtensionContext, commandId: string, handler: (arg: u
   context.commands.registerCommand(commandId, handler);
 }
 
-function registerMenus(context: ExtensionContext): void {
-  const menu = context.ui.registerContextMenuAction.bind(context.ui);
+function clipDurationMs(context: ExtensionContext, clip: AudioClip<"1.0.0">): number {
+  const tempo = context.application.song.tempo;
+  return Math.max(1, Math.round((clip.duration / tempo) * 60_000));
+}
 
-  menu("ClipSlot", "Generate Text-to-Speech (ElevenLabs)", COMMANDS.ttsClipSlot);
-  menu("ClipSlot", "Generate SFX (ElevenLabs)", COMMANDS.sfxClipSlot);
-  menu("ClipSlot", "Generate Music (ElevenLabs)", COMMANDS.musicClipSlot);
-  menu("ClipSlot", "Generate Dialogue (ElevenLabs)", COMMANDS.dialogueClipSlot);
-  menu("ClipSlot", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolationClipSlot);
-  menu("ClipSlot", "Generate Drum Rack SFX (ElevenLabs)", COMMANDS.drumRackSfxClipSlot);
-  menu("ClipSlotSelection", "Batch Text-to-Speech (ElevenLabs)", COMMANDS.batchTts);
+function resolveAudioTrackForClip(clip: AudioClip<"1.0.0">): AudioTrack<"1.0.0"> | null {
+  const parent = clip.parent;
+  if (isAudioTrack(parent)) return parent;
+  if (isClipSlot(parent)) {
+    const track = parent.parent;
+    if (isAudioTrack(track)) return track;
+  }
+  return null;
+}
 
-  menu("AudioTrack.ArrangementSelection", "Generate Text-to-Speech (ElevenLabs)", COMMANDS.ttsArrangement);
-  menu("AudioTrack.ArrangementSelection", "Generate SFX (ElevenLabs)", COMMANDS.sfxArrangement);
-  menu("AudioTrack.ArrangementSelection", "Generate Music (ElevenLabs)", COMMANDS.musicArrangement);
-  menu("AudioTrack.ArrangementSelection", "Change Voice (ElevenLabs)", COMMANDS.voiceChanger);
-  menu("AudioTrack.ArrangementSelection", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolation);
-  menu("AudioTrack.ArrangementSelection", "Transcribe (ElevenLabs Scribe)", COMMANDS.transcribeArrangement);
-  menu("AudioTrack.ArrangementSelection", "Generate Dialogue (ElevenLabs)", COMMANDS.dialogueArrangement);
-  menu("AudioTrack.ArrangementSelection", "Transcribe to MIDI Lyrics (ElevenLabs)", COMMANDS.transcribeToMidiArrangement);
-  menu("AudioTrack.ArrangementSelection", "Align Lyrics to MIDI (ElevenLabs)", COMMANDS.alignToMidiArrangement);
-  menu("AudioTrack.ArrangementSelection", "Clone Voice from Selection (ElevenLabs)", COMMANDS.cloneVoiceArrangement);
-  menu("AudioTrack.ArrangementSelection", "Separate Stems (ElevenLabs)", COMMANDS.stemSeparationArrangement);
+async function handleMusicInpaintClip(
+  context: ExtensionContext,
+  clip: AudioClip<"1.0.0">,
+  mode: MusicInpaintMode,
+): Promise<void> {
+  const audioPath = await resolveAudioPathForClip(clip);
+  if (!audioPath) return;
 
-  menu("AudioClip", "Transcribe (ElevenLabs Scribe)", COMMANDS.transcribeClip);
-  menu("AudioClip", "Transcribe to MIDI Lyrics (ElevenLabs)", COMMANDS.transcribeToMidiClip);
-  menu("AudioClip", "Align Lyrics to MIDI (ElevenLabs)", COMMANDS.alignToMidiClip);
-  menu("AudioClip", "Clone Voice from Clip (ElevenLabs)", COMMANDS.cloneVoiceClip);
-  menu("AudioClip", "Isolate Voice (ElevenLabs)", COMMANDS.vocalIsolationClip);
-  menu("AudioClip", "Separate Stems (ElevenLabs)", COMMANDS.stemSeparationClip);
+  const track = resolveAudioTrackForClip(clip);
+  if (!track) return;
 
-  menu("AudioTrack", "Add Pronunciation Rule (ElevenLabs)", COMMANDS.pronunciationRule);
+  const totalDurationMs = clipDurationMs(context, clip);
+  const modal = await promptMusicInpaint(context, mode, totalDurationMs / 1000);
+  if (!modal) return;
 
-  menu("DrumRack", "Generate Drum Rack SFX (ElevenLabs)", COMMANDS.drumRackSfx);
-  menu("DrumRack", "Manage ElevenLabs API Key", COMMANDS.manageApiKey);
-  menu("AudioTrack", "Manage ElevenLabs API Key", COMMANDS.manageApiKey);
-  menu("Simpler", "Generate Text-to-Speech Sample (ElevenLabs)", COMMANDS.simplerTts);
-  menu("Simpler", "Generate SFX Sample (ElevenLabs)", COMMANDS.simplerSfx);
+  await pipelineMusicInpaint(
+    context,
+    mode,
+    audioPath,
+    totalDurationMs,
+    modal,
+    track,
+    { startTime: clip.startTime, duration: clip.duration },
+  );
+}
+
+async function handleMusicInpaintArrangement(
+  context: ExtensionContext,
+  selection: ArrangementSelection,
+  mode: MusicInpaintMode,
+): Promise<void> {
+  const track = getPrimaryAudioTrack(context, selection);
+  if (!track) return;
+
+  const audioPath = await context.resources.renderPreFxAudio(
+    track,
+    selection.time_selection_start,
+    selection.time_selection_end,
+  );
+
+  const durationBeats = selectionDuration(selection);
+  const tempo = context.application.song.tempo;
+  const totalDurationMs = Math.max(1, Math.round((durationBeats / tempo) * 60_000));
+
+  const modal = await promptMusicInpaint(context, mode, totalDurationMs / 1000);
+  if (!modal) return;
+
+  await pipelineMusicInpaint(
+    context,
+    mode,
+    audioPath,
+    totalDurationMs,
+    modal,
+    track,
+    arrangementClipArgs(selection),
+  );
 }
 
 export function activate(activation: ActivationContext) {
@@ -226,6 +231,7 @@ export function activate(activation: ActivationContext) {
         const bytes = await generateTts(client, {
           text: modal.text!,
           voiceId: modal.voiceId ?? DEFAULT_VOICE_ID,
+          modelId: modal.modelId,
           pronunciationDictionaryLocators: activeDict
             ? [{ pronunciationDictionaryId: activeDict.id, versionId: activeDict.versionId }]
             : undefined,
@@ -306,12 +312,12 @@ export function activate(activation: ActivationContext) {
       const selection = arg as ArrangementSelection;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
-      const wavPath = await context.resources.renderPreFxAudio(
+      const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
       );
-      await pipelineTranscribe(context, wavPath, (t) => showTranscript(context, t));
+      await pipelineTranscribe(context, audioPath, (t) => showTranscript(context, t));
     });
   });
 
@@ -391,7 +397,7 @@ export function activate(activation: ActivationContext) {
       const selection = arg as ArrangementSelection;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
-      const wavPath = await context.resources.renderPreFxAudio(
+      const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
@@ -399,7 +405,7 @@ export function activate(activation: ActivationContext) {
       const duration = selectionDuration(selection);
       await pipelineTranscribeToMidi(
         context,
-        wavPath,
+        audioPath,
         selection.time_selection_start,
         duration > 0 ? duration : 4,
       );
@@ -424,7 +430,7 @@ export function activate(activation: ActivationContext) {
       if (!track) return;
       const modal = await promptAlignLyrics(context);
       if (!modal) return;
-      const wavPath = await context.resources.renderPreFxAudio(
+      const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
@@ -432,7 +438,7 @@ export function activate(activation: ActivationContext) {
       const duration = selectionDuration(selection);
       await pipelineAlignToMidi(
         context,
-        wavPath,
+        audioPath,
         modal,
         selection.time_selection_start,
         duration > 0 ? duration : 4,
@@ -458,12 +464,12 @@ export function activate(activation: ActivationContext) {
       if (!track) return;
       const modal = await promptCloneVoice(context);
       if (!modal) return;
-      const wavPath = await context.resources.renderPreFxAudio(
+      const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
       );
-      await pipelineCloneVoice(context, wavPath, modal);
+      await pipelineCloneVoice(context, audioPath, modal);
     });
   });
 
@@ -485,7 +491,7 @@ export function activate(activation: ActivationContext) {
       if (!track) return;
       const modal = await promptStemSeparation(context);
       if (!modal) return;
-      const wavPath = await context.resources.renderPreFxAudio(
+      const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
@@ -493,11 +499,63 @@ export function activate(activation: ActivationContext) {
       const duration = selectionDuration(selection);
       await pipelineStemSeparation(
         context,
-        wavPath,
+        audioPath,
         modal,
         selection.time_selection_start,
         duration > 0 ? duration : 4,
       );
+    });
+  });
+
+  register(context, COMMANDS.musicExtendClip, (arg) => {
+    runSafe(async () => {
+      const clip = resolveHandle(context, arg as Handle, AudioClip);
+      await handleMusicInpaintClip(context, clip, "extend");
+    });
+  });
+
+  register(context, COMMANDS.musicExtendArrangement, (arg) => {
+    runSafe(async () => {
+      await handleMusicInpaintArrangement(context, arg as ArrangementSelection, "extend");
+    });
+  });
+
+  register(context, COMMANDS.musicRegenerateClip, (arg) => {
+    runSafe(async () => {
+      const clip = resolveHandle(context, arg as Handle, AudioClip);
+      await handleMusicInpaintClip(context, clip, "regenerate");
+    });
+  });
+
+  register(context, COMMANDS.musicRegenerateArrangement, (arg) => {
+    runSafe(async () => {
+      await handleMusicInpaintArrangement(context, arg as ArrangementSelection, "regenerate");
+    });
+  });
+
+  register(context, COMMANDS.musicLoopClip, (arg) => {
+    runSafe(async () => {
+      const clip = resolveHandle(context, arg as Handle, AudioClip);
+      await handleMusicInpaintClip(context, clip, "loop");
+    });
+  });
+
+  register(context, COMMANDS.musicLoopArrangement, (arg) => {
+    runSafe(async () => {
+      await handleMusicInpaintArrangement(context, arg as ArrangementSelection, "loop");
+    });
+  });
+
+  register(context, COMMANDS.musicSimilarClip, (arg) => {
+    runSafe(async () => {
+      const clip = resolveHandle(context, arg as Handle, AudioClip);
+      await handleMusicInpaintClip(context, clip, "similar");
+    });
+  });
+
+  register(context, COMMANDS.musicSimilarArrangement, (arg) => {
+    runSafe(async () => {
+      await handleMusicInpaintArrangement(context, arg as ArrangementSelection, "similar");
     });
   });
 
@@ -515,5 +573,5 @@ export function activate(activation: ActivationContext) {
     });
   });
 
-  registerMenus(context);
+  registerContextMenus(context);
 }

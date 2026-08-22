@@ -38,11 +38,20 @@ export interface StoredDrumKitSettings {
   pads: StoredDrumPadSettings[];
 }
 
+export interface StoredSong {
+  songId: string;
+  filePath: string;
+  prompt?: string;
+  durationMs?: number;
+  createdAt: number;
+}
+
 export interface ExtensionStorageConfig {
   clonedVoices: StoredClonedVoice[];
   pronunciationDictionaries: StoredPronunciationDictionary[];
   activePronunciationDictionaryId?: string;
   drumKit?: StoredDrumKitSettings;
+  songs?: StoredSong[];
 }
 
 /** @deprecated Use StoredDrumPadSettings */
@@ -85,10 +94,12 @@ function normalizeStoredDrumKit(raw: Partial<StoredDrumKitSettings> | undefined)
 }
 
 const CONFIG_FILENAME = "elevenlabs-config.json";
+const MAX_STORED_SONGS = 50;
 
 const EMPTY_CONFIG: ExtensionStorageConfig = {
   clonedVoices: [],
   pronunciationDictionaries: [],
+  songs: [],
 };
 
 function configPath(storageDirectory: string): string {
@@ -108,6 +119,7 @@ export async function loadStorageConfig(
       pronunciationDictionaries: parsed.pronunciationDictionaries ?? [],
       activePronunciationDictionaryId: parsed.activePronunciationDictionaryId,
       drumKit: normalizeStoredDrumKit(parsed.drumKit),
+      songs: parsed.songs ?? [],
     };
   } catch {
     return { ...EMPTY_CONFIG };
@@ -171,5 +183,22 @@ export async function saveDrumKitSettings(
 ): Promise<void> {
   const config = await loadStorageConfig(storageDirectory);
   config.drumKit = settings;
+  await saveStorageConfig(storageDirectory, config);
+}
+
+export function findStoredSongByPath(
+  config: ExtensionStorageConfig,
+  filePath: string,
+): StoredSong | undefined {
+  return config.songs?.find((s) => s.filePath === filePath);
+}
+
+export async function addStoredSong(
+  storageDirectory: string | undefined,
+  song: StoredSong,
+): Promise<void> {
+  const config = await loadStorageConfig(storageDirectory);
+  const songs = [song, ...(config.songs ?? []).filter((s) => s.songId !== song.songId && s.filePath !== song.filePath)];
+  config.songs = songs.slice(0, MAX_STORED_SONGS);
   await saveStorageConfig(storageDirectory, config);
 }

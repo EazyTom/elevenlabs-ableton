@@ -83,6 +83,9 @@
         return;
       }
 
+      const seedRaw = document.getElementById("seed").value.trim();
+      const seedParsed = seedRaw ? parseInt(seedRaw, 10) : undefined;
+
       closeWithResult({
         cancelled: false,
         prompt: prompt || undefined,
@@ -95,6 +98,7 @@
         negativePrompt: document.getElementById("negativePrompt").value.trim() || undefined,
         outputFormat: document.getElementById("outputFormat").value,
         modelId: document.getElementById("modelId").value,
+        seed: Number.isFinite(seedParsed) ? seedParsed : undefined,
         variants: Number.isFinite(variants) ? variants : 1,
       });
     }
@@ -258,18 +262,27 @@
     Seamless Loop
   </label>
 
+  <label class="select-row" for="seed">
+    <span class="control-label">Seed</span>
+    <input id="seed" type="number" min="0" step="1" placeholder="Optional (plan mode only)" style="flex:1" />
+  </label>
+
   <label class="select-row" for="modelId">
     <span class="control-label">Model</span>
     <select id="modelId">
-      <option value="music_v1" selected>Music v1</option>
-      <option value="music_v2">Music v2</option>
+      <option value="music_v2" selected>Music v2</option>
+      <option value="music_v1">Music v1 (legacy)</option>
     </select>
   </label>
 
   <label class="select-row" for="outputFormat">
     <span class="control-label">Quality</span>
     <select id="outputFormat">
-      <option value="mp3_44100_128" selected>MP3 128 kbps (default)</option>
+      <option value="auto">Auto (best for model)</option>
+      <option value="mp3_48000_192" selected>MP3 48 kHz 192 kbps (v2 default)</option>
+      <option value="mp3_48000_240">MP3 48 kHz 240 kbps</option>
+      <option value="mp3_48000_320">MP3 48 kHz 320 kbps</option>
+      <option value="mp3_44100_128">MP3 44.1 kHz 128 kbps</option>
       <option value="mp3_44100_64">MP3 64 kbps</option>
       <option value="mp3_44100_96">MP3 96 kbps</option>
       <option value="mp3_44100_192">MP3 192 kbps</option>
@@ -279,7 +292,7 @@
   </label>
 
   <div class="hints-section">
-    <p class="hint model-hint">Music v1 is the default API model. Music v2 needs a paid plan and may require ElevenLabs API early access — contact sales if v2 requests fail.</p>
+    <p class="hint model-hint">Music v2 is recommended. v1 is legacy and will be deprecated. Seamless loops use inpainting (right-click a generated clip after import).</p>
     <p class="hint loop-hint">For loops, try 8–30 seconds. Variants load into the selected slot and the slots below it.</p>
     <p class="hint quality-hint">MP3 192 kbps and PCM formats require a higher ElevenLabs plan (Creator or Pro).</p>
   </div>

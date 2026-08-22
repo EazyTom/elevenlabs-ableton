@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ElevenLabs Text-to-Speech</title>
   <script>
     function doSendMessage(message) {
@@ -31,6 +30,22 @@
         `${Math.round(sliderValue(id) * 100)}%`;
     }
 
+    function syncModelUi() {
+      const v3 = document.getElementById("modelId").value === "eleven_v3";
+      document.getElementById("flashStabilityRow").hidden = v3;
+      document.getElementById("v3StabilityRow").hidden = !v3;
+      document.getElementById("similarityRow").hidden = v3;
+      document.getElementById("styleRow").hidden = v3;
+      document.getElementById("v3Hint").hidden = !v3;
+    }
+
+    function stabilityValue() {
+      if (document.getElementById("modelId").value === "eleven_v3") {
+        return parseFloat(document.getElementById("v3Stability").value);
+      }
+      return sliderValue("stability");
+    }
+
     function submit() {
       const text = document.getElementById("text").value.trim();
       const voiceId = document.getElementById("voiceId").value.trim()
@@ -40,8 +55,9 @@
         cancelled: false,
         text,
         voiceId: voiceId || undefined,
+        modelId: document.getElementById("modelId").value,
         speed: sliderValue("speed"),
-        stability: sliderValue("stability"),
+        stability: stabilityValue(),
         similarityBoost: sliderValue("similarity"),
         style: sliderValue("style"),
       });
@@ -55,6 +71,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("text").focus();
+      document.getElementById("modelId").addEventListener("change", syncModelUi);
       document.getElementById("speed").addEventListener("input", updateSpeedLabel);
       document.getElementById("stability").addEventListener("input", () => updatePercentLabel("stability", "stabilityValue"));
       document.getElementById("similarity").addEventListener("input", () => updatePercentLabel("similarity", "similarityValue"));
@@ -63,6 +80,7 @@
       updatePercentLabel("stability", "stabilityValue");
       updatePercentLabel("similarity", "similarityValue");
       updatePercentLabel("style", "styleValue");
+      syncModelUi();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
       });
@@ -78,11 +96,19 @@
       text-align: right;
       color: var(--c-accent-secondary);
     }
+    .hint { font-size: 0.95em; }
   </style>
 </head>
 <body>
   <label for="text">Text to speak</label>
-  <textarea id="text" placeholder="Enter text for ElevenLabs text-to-speech…"></textarea>
+  <textarea id="text" placeholder="Enter text for ElevenLabs text-to-speech… Use [whispers], [laughs], [sighs] with Eleven v3."></textarea>
+  <p id="v3Hint" class="hint" hidden>Eleven v3 supports audio tags like [whispers], [laughs], [sighs]. Max 5,000 characters. Higher latency than Flash.</p>
+
+  <label for="modelId">Model</label>
+  <select id="modelId">
+    <option value="eleven_flash_v2_5" selected>Flash v2.5 (fast, default)</option>
+    <option value="eleven_v3">Eleven v3 (expressive quality)</option>
+  </select>
 
   <label for="voiceSelect">Voice (from library)</label>
   <select id="voiceSelect" onchange="onVoiceSelect()">{{VOICE_OPTIONS}}</select>
@@ -97,17 +123,25 @@
       <input id="speed" type="range" min="0.7" max="1.2" step="0.05" value="1" />
       <span id="speedValue">1.00×</span>
     </label>
-    <label class="tempo-row">
+    <label class="tempo-row" id="flashStabilityRow">
       <span>Stability</span>
       <input id="stability" type="range" min="0" max="1" step="0.05" value="0.5" />
       <span id="stabilityValue">50%</span>
     </label>
-    <label class="tempo-row">
+    <label class="tempo-row" id="v3StabilityRow" hidden>
+      <span>Stability</span>
+      <select id="v3Stability">
+        <option value="0">Creative (0.0)</option>
+        <option value="0.5" selected>Natural (0.5)</option>
+        <option value="1">Robust (1.0)</option>
+      </select>
+    </label>
+    <label class="tempo-row" id="similarityRow">
       <span>Similarity</span>
       <input id="similarity" type="range" min="0" max="1" step="0.05" value="0.75" />
       <span id="similarityValue">75%</span>
     </label>
-    <label class="tempo-row">
+    <label class="tempo-row" id="styleRow">
       <span>Style exaggeration</span>
       <input id="style" type="range" min="0" max="1" step="0.05" value="0" />
       <span id="styleValue">0%</span>

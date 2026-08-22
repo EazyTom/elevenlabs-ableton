@@ -9,17 +9,17 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.6.0](CHANGELOG.md#v060)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.7.0](CHANGELOG.md#v070)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
 
 
 | Field                        | Value                                                         |
 | ---------------------------- | ------------------------------------------------------------- |
-| **Extension version**        | `0.6.0` — **19** context-menu features                        |
+| **Extension version**        | `0.7.0` — **27** context-menu features                        |
 | **Ableton Extensions API**   | `1.0.0` (`minimumApiVersion` in `manifest.json`)              |
 | **Ableton SDK**              | `@ableton-extensions/sdk` **1.0.0-beta.0**                    |
-| **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.51.0**                       |
+| **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.60.0**                       |
 | **Live requirement**         | **Live 12.4 Alpha/Beta** (Centercode) with Extensions enabled |
-| **Node.js** (dev/build only) | **≥ 24.14.1**                                                 |
+| **Node.js** (dev/build only) | **≥ 24.16.0**                                                 |
 
 
 > Extensions are not available in retail Live builds today. You need a Live 12.4 program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
@@ -52,7 +52,7 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 
 | Category          | Actions                                                                                                              | Where                                              |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Generate**      | TTS, SFX, Music, Dialogue — modals with sliders, models, loops, variants (see [below](#sfx-music--drum-rack-modals)) | Clip slot, arrangement selection                   |
+| **Generate**      | TTS (Flash v2.5 / Eleven v3), SFX, Music (v1/v2), Dialogue, **Music inpainting** (extend, regenerate, loop, similar) | Clip slot, arrangement selection, audio clip |
 | **Batch**         | TTS to multiple session slots                                                                                        | Multi-selected clip slots                          |
 | **Transform**     | Voice changer, vocal isolation (arrangement + Session clips/slots)                                                   | Arrangement selection, audio clip, audio clip slot |
 | **Stems**         | Separate into 2 or 6 stems → new tracks                                                                              | Audio clip, arrangement selection                  |
@@ -65,6 +65,8 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 | **Clone voice**   | Instant voice clone from audio                                                                                       | Audio clip, arrangement selection                  |
 | **Pronunciation** | Custom word pronunciation for TTS                                                                                    | Audio track (any)                                  |
 
+
+**v0.7.0** adds **Music inpainting** (Music v2): extend, regenerate section, seamless loop, and generate similar music on audio clips and arrangement selections. TTS modals include an **Eleven v3** model picker with audio-tag hints.
 
 **v0.5.0** Session **Isolate Voice** on audio clip slots and clips replaces the clip in place and preserves loop settings.
 
@@ -111,7 +113,7 @@ Right-click an **audio clip slot** or **arrangement selection** → **Generate M
 | **Negative prompt**  | Optional comma-separated styles to avoid (e.g. vocals, distortion). Uses a **composition plan** with `negative_global_styles` instead of plain prompt mode.                                                    |
 | **Auto duration**    | Off by default — sends `music_length_ms` from the duration slider (default 30 s). Check to let the API pick length from the prompt.                                                                            |
 | **Quality**          | MP3 bitrates, PCM, or Opus (`output_format`). MP3 192 / PCM need Creator or Pro.                                                                                                                               |
-| **Model**            | **Music v1** (default) or **Music v2** — inline row, half-width dropdown. v2 may need API early access.                                                                                                        |
+| **Model**            | **Music v2** (default) or **Music v1** — inline row, half-width dropdown. v2 supports inpainting and optional seed. |
 | **Seamless Loop**    | Uses API `loop` generation mode; clip **Loop** is set in Live on import.                                                                                                                                       |
 
 
@@ -214,7 +216,7 @@ Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem 
 
 ### Install & run (pre-built `.ablx`)
 
-Download `elevenlabs-ableton-0.6.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
+Download `elevenlabs-ableton-0.7.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
 
 1. Open **Live → Preferences → Extensions**
 2. **Drag and drop** the `.ablx` onto the Extensions page
@@ -250,6 +252,7 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules; enhanced SFX/Music/Drum Rack modals |
 | **0.5.0** | Session voice isolation; SFX/Music modal UX; Live tempo sync; audio-slot guards; UI layout polish               |
 | **0.6.0** | Drum Rack SFX pad-slot modal; API key onboarding & management; MIDI clip slot drum entry                        |
+| **0.7.0** | Music inpainting (extend/regenerate/loop/similar); Eleven v3 TTS; Music v2 defaults; table-driven context menus |
 
 
 Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
@@ -437,7 +440,7 @@ npm run package
 1. Open **Live 12.4 Alpha/Beta**
 2. Preferences → **Extensions** → enable **Developer Mode**
 3. Run `npm start` (or `extensions-cli run`) so Live loads the extension
-4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.6.0 active — 19 features`
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.7.0 active — 27 features`
 
 ---
 
@@ -448,7 +451,7 @@ From the project root, with **Node.js ≥ 24.14.1** and `vendor/*.tgz` SDK packa
 ```bash
 npm install
 npm run check:api          # optional — needs ELEVENLABS_API_KEY
-npm run package            # production build + elevenlabs-ableton-0.6.0.ablx
+npm run package            # production build + elevenlabs-ableton-0.7.0.ablx
 ```
 
 `npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v060).

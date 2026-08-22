@@ -4,6 +4,10 @@ interface ElevenLabsErrorDetail {
   code?: string;
   type?: string;
   loc?: (string | number)[];
+  data?: {
+    prompt_suggestion?: string;
+    composition_plan_suggestion?: unknown;
+  };
 }
 
 interface ElevenLabsErrorBody {
@@ -25,6 +29,15 @@ function detailMessage(
   return detail.message ?? detail.msg;
 }
 
+/** Extract a rewritten prompt/plan suggestion from bad_prompt API errors. */
+export function extractApiSuggestion(err: unknown): string | undefined {
+  const apiErr = err as Error & { body?: ElevenLabsErrorBody };
+  const detail = apiErr.body?.detail;
+  if (!detail || typeof detail === "string" || Array.isArray(detail)) return undefined;
+  const suggestion = detail.data?.prompt_suggestion;
+  return typeof suggestion === "string" && suggestion.trim() ? suggestion.trim() : undefined;
+}
+
 /** Turn ElevenLabs SDK / fetch errors into a short user-facing message. */
 export function formatApiError(err: unknown): string {
   if (!(err instanceof Error)) {
@@ -37,10 +50,12 @@ export function formatApiError(err: unknown): string {
     apiErr.body?.message;
 
   if (fromBody) {
+    const suggestion = extractApiSuggestion(err);
+    const base = suggestion ? `${fromBody}\n\nSuggested rewrite: ${suggestion}` : fromBody;
     if (apiErr.statusCode) {
-      return `${fromBody} (HTTP ${apiErr.statusCode})`;
+      return `${base} (HTTP ${apiErr.statusCode})`;
     }
-    return fromBody;
+    return base;
   }
 
   const msg = err.message;

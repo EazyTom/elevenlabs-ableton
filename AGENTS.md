@@ -97,6 +97,8 @@ Modals are **HTML files** in `ui/` loaded as data URLs by the Ableton Extension 
 
 1. **Prompt function** in `src/ui.ts` (e.g. `promptSfx`, `promptDrumRackSfx`) prepares HTML, calls `showModal<T>()`.
 2. **`showModal`** wraps HTML with `prepareModalHtml(html, subtitle)` from `ui-branding.ts` (theme CSS, `modal-base.css`, logo header), then `context.ui.showModalDialog(dataUrl, width, height + MODAL_HEADER_EXTRA_HEIGHT)`.
+
+   Since **Live 12.4.5b4**, `showModalDialog` **no longer retains data between calls** — each invocation starts fresh. Do not rely on WebView state persisting across modal opens.
 3. **Webview JS** calls `closeWithResult({ ... })` → posts `{ method: "close_and_send", params: [JSON.stringify(result)] }` via `webkit.messageHandlers.live` or `chrome.webview`.
 4. **`parseJson<T>()`** in `ui.ts` parses the returned string; `{ cancelled: true }` → prompt returns `null`.
 

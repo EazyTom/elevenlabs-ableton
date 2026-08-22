@@ -6,6 +6,28 @@ Extension release version is defined in `src/version.ts` (`EXTENSION_VERSION`) a
 
 Feature-level versions are tracked in `FEATURE_VERSIONS` inside `src/version.ts` for incremental capability tracking.
 
+<a id="v070"></a>
+
+## [0.7.0] — 2026-08-02
+
+### Added
+
+- **Music inpainting (music_v2)** — **Extend Music**, **Regenerate Section**, **Make Seamless Loop**, and **Generate Similar Music** on audio clips and arrangement selections
+- **Eleven v3 TTS** — model picker in the TTS modal (Flash v2.5 default, Eleven v3 quality) with discrete v3 stability and audio-tag hints
+- **Music v2 defaults** — music generation defaults to `music_v2`, 48 kHz quality options, optional seed (composition-plan path), Live key/scale in composed prompts
+- **Song ID persistence** — `store_for_inpainting` on generate; `elevenlabs-config.json` tracks song IDs for re-upload fallback
+
+### Changed
+
+- **Music API** — migrated from raw REST to typed `client.music.compose()`; removed invalid `generation_mode`; v1/v2 composition plans split correctly
+- **Dependencies** — `@elevenlabs/elevenlabs-js` ^2.60.0, TypeScript ^7.0.2, Node.js ≥ 24.16.0
+- **Context menus** — table-driven registration in `src/menu-registry.ts` (23 menu actions)
+
+### Fixed
+
+- **Music v2 + negative prompt** — no longer sends v1 `MusicPrompt` shape to v2 (API error)
+- **Seamless Loop toggle** — documented interim behavior; true loops via inpainting glue-chunk workflow
+
 <a id="v060"></a>
 
 ## [0.6.0] — 2026-06-12

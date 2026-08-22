@@ -6,6 +6,7 @@ import alignLyricsModalHtml from "../ui/align-lyrics-modal.html";
 import cloneVoiceModalHtml from "../ui/clone-voice-modal.html";
 import dialogueModalHtml from "../ui/dialogue-modal.html";
 import drumRackSfxModalHtml from "../ui/drum-rack-sfx-modal.html";
+import musicInpaintModalHtml from "../ui/music-inpaint-modal.html";
 import musicModalHtml from "../ui/music-modal.html";
 import pronunciationModalHtml from "../ui/pronunciation-modal.html";
 import resultModalHtml from "../ui/result-modal.html";
@@ -63,6 +64,8 @@ import type {
   DialogueModalResult,
   DrumPadConfig,
   DrumRackSfxModalResult,
+  MusicInpaintModalResult,
+  MusicInpaintMode,
   MusicModalResult,
   PronunciationModalResult,
   SfxModalResult,
@@ -525,6 +528,45 @@ export async function promptSfx(context: ExtensionContext): Promise<SfxModalResu
   );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
   return normalizeSfxModalResult(parsed);
+}
+
+export async function promptMusicInpaint(
+  context: ExtensionContext,
+  mode: MusicInpaintMode,
+  durationSec = 30,
+): Promise<MusicInpaintModalResult | null> {
+  const titles: Record<MusicInpaintMode, string> = {
+    extend: "Extend Music",
+    regenerate: "Regenerate Section",
+    loop: "Make Seamless Loop",
+    similar: "Generate Similar Music",
+  };
+  const fields: Record<MusicInpaintMode, string> = {
+    extend: `<label>Intro (sec)</label><input id="introSec" type="number" min="3" max="120" value="15" />
+<label>Outro (sec)</label><input id="outroSec" type="number" min="3" max="120" value="15" />`,
+    regenerate: `<label>Regen start (sec)</label><input id="regenStartSec" type="number" min="0" value="0" />
+<label>Regen end (sec)</label><input id="regenEndSec" type="number" min="1" value="${Math.max(1, Math.round(durationSec / 2))}" />
+<label>Section text</label><textarea id="regenText" placeholder="[Chorus]&#10;New lyrics or directions"></textarea>`,
+    loop: `<label>Slice start (sec)</label><input id="sliceStartSec" type="number" min="0" value="${Math.max(0, durationSec * 0.3).toFixed(1)}" />
+<label>Slice end (sec)</label><input id="sliceEndSec" type="number" min="1" value="${Math.max(1, durationSec * 0.7).toFixed(1)}" />
+<label>Glue (sec)</label><input id="glueSec" type="number" min="3" max="30" value="3" />`,
+    similar: `<label>Prompt</label><textarea id="prompt" placeholder="Describe the new similar track"></textarea>
+<label>Duration (sec)</label><input id="durationSec" type="number" min="6" max="600" value="${Math.min(60, Math.round(durationSec))}" />`,
+  };
+  const html = musicInpaintModalHtml
+    .replace("{{TITLE}}", titles[mode])
+    .replace("{{MODE}}", mode)
+    .replace("{{DEFAULT_DURATION_SEC}}", String(Math.round(durationSec)))
+    .replace("{{FIELDS}}", fields[mode]);
+  const parsed = await showModal<MusicInpaintModalResult>(
+    context,
+    prepareModalHtml(html, titles[mode]),
+    460,
+    420,
+    titles[mode],
+  );
+  if (parsed.cancelled) return null;
+  return parsed;
 }
 
 export async function promptMusic(context: ExtensionContext): Promise<MusicModalResult | null> {

@@ -33,22 +33,26 @@ npm run check:api:full       # includes SFX generation test
 
 ## Manual in Live (smoke)
 
-Requires Live 12.4 Alpha, Developer Mode, `npm start`.
+Requires Live 12.4.5 beta or newer, Developer Mode, `npm start`.
 
 | # | Action | Pass |
 |---|--------|------|
 | 1 | Clip slot → Generate TTS | Audio clip appears |
-| 2 | Arrangement selection → Generate SFX | Clip at selection |
-| 3 | Multi clip slots → Batch TTS | All slots filled |
-| 4 | Arrangement → Change Voice | Take lane clip |
-| 5 | Audio clip → Transcribe | Transcript modal |
-| 6 | Audio clip → Separate Stems (2-stem) | New tracks created |
-| 7 | Audio track → Add Pronunciation Rule → TTS | Alias applied |
-| 8 | Simpler → Generate SFX Sample | Sample replaced |
+| 2 | TTS modal → Eleven v3 model | Speech generates with v3 stability |
+| 3 | Arrangement selection → Generate SFX | Clip at selection |
+| 4 | Multi clip slots → Batch TTS | All slots filled |
+| 5 | Arrangement → Change Voice | Take lane clip |
+| 6 | Audio clip → Transcribe | Transcript modal |
+| 7 | Audio clip → Separate Stems (2-stem) | New tracks created |
+| 8 | Audio track → Add Pronunciation Rule → TTS | Alias applied |
+| 9 | Simpler → Generate SFX Sample | Sample replaced |
+| 10 | Generate Music (music_v2) | Clip + song ID stored |
+| 11 | Audio clip → Extend Music | Extended clip imported |
+| 12 | Audio clip → Make Seamless Loop | Looping clip imported |
 
 ## Known limitations (document, don't block release)
 
-- Extensions require Live 12.4 Alpha
+- Extensions require Live 12.4.5 beta and Live 12 Suite
 - No streaming import into Live
 - Voice picker capped at 50 voices until v0.5.0 pagination
 - Stem / music / clone features consume significant API credits
