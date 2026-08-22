@@ -574,10 +574,10 @@ export async function pipelineVoiceChanger(
   await withElevenLabsProgress(context, "ElevenLabs Voice Changer", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Exporting audio from Live", 20);
-    const wavPath = await context.resources.renderPreFxAudio(track, startTime, endTime);
+    const renderedPath = await context.resources.renderPreFxAudio(track, startTime, endTime);
     if (signal.aborted) return;
     update("Transforming voice", 55);
-    const bytes = await convertVoice(client, wavPath, voiceId);
+    const bytes = await convertVoice(client, renderedPath, voiceId);
     if (signal.aborted) return;
     update("Creating take lane clip", 85);
     const takeLane = await track.createTakeLane();
@@ -619,10 +619,10 @@ export async function pipelineVocalIsolation(
   await withElevenLabsProgress(context, "ElevenLabs Voice Isolation", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Exporting audio from Live", 20);
-    const wavPath = await context.resources.renderPreFxAudio(track, startTime, endTime);
+    const renderedPath = await context.resources.renderPreFxAudio(track, startTime, endTime);
     if (signal.aborted) return;
     update("Isolating voice", 55);
-    const bytes = await isolateVocals(client, wavPath);
+    const bytes = await isolateVocals(client, renderedPath);
     if (signal.aborted) return;
     update("Creating take lane clip", 85);
     await importIsolatedVoiceToTakeLane(

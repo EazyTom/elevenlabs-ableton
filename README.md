@@ -16,7 +16,7 @@ Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech di
 | ---------------------------- | ------------------------------------------------------------- |
 | **Extension version**        | `0.7.0` — **27** context-menu features                        |
 | **Ableton Extensions API**   | `1.0.0` (`minimumApiVersion` in `manifest.json`)              |
-| **Ableton SDK**              | `@ableton-extensions/sdk` **1.0.0-beta.0**                    |
+| **Ableton SDK**              | `@ableton-extensions/sdk` **1.0.0-beta.1**                    |
 | **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.60.0**                       |
 | **Live requirement**         | **Live 12.4 Alpha/Beta** (Centercode) with Extensions enabled |
 | **Node.js** (dev/build only) | **≥ 24.16.0**                                                 |

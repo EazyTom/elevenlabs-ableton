@@ -19,13 +19,13 @@
     "publish": "tsx scripts/publish-release.ts"
   },
   "dependencies": {
-    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz",
+    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.1.tgz",
     "@elevenlabs/elevenlabs-js": "^2.60.0",
     "fflate": "^0.8.3",
     "formdata-polyfill": "^4.0.10"
   },
   "devDependencies": {
-    "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",
+    "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.1.tgz",
     "@types/node": "^24.13.3",
     "esbuild": "0.28.1",
     "tsx": "^4.23.4",

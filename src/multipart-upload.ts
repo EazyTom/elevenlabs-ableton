@@ -31,6 +31,9 @@ export function audioMimeType(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
     case ".wav":
       return "audio/wav";
+    case ".aif":
+    case ".aiff":
+      return "audio/aiff";
     case ".mp3":
       return "audio/mpeg";
     case ".flac":
