@@ -44,6 +44,31 @@ const tempDirectory = resolveTempDirectory(storageDirectory);
 mkdirSync(tempDirectory, { recursive: true });
 
 const args = ["run", "--temp-directory", tempDirectory];
+const liveSelector = process.argv.find((arg, index) => process.argv[index - 1] === "--live")
+  ?? process.env.ABLETON_LIVE?.trim();
+
+let livePath = process.env.EXTENSION_HOST_PATH?.trim();
+if (liveSelector) {
+  const { resolveLiveInstall } = await import("./live-installs.js");
+  const install = resolveLiveInstall(liveSelector);
+  if (!install) {
+    console.error(`No Extension Host found for --live ${liveSelector}`);
+    process.exit(1);
+  }
+  livePath = install.hostModulePath;
+  console.log(`  Live: ${install.label} ${install.version}`);
+} else if (livePath) {
+  console.log(`  Live: ${livePath}`);
+} else {
+  const { resolveLiveInstall } = await import("./live-installs.js");
+  const install = resolveLiveInstall(undefined);
+  if (install) {
+    livePath = install.hostModulePath;
+    console.log(`  Live: ${install.label} ${install.version} (newest discovered beta)`);
+  }
+}
+
+if (livePath) args.push("--live", livePath);
 
 if (storageDirectory) {
   args.push("--storage-directory", storageDirectory);

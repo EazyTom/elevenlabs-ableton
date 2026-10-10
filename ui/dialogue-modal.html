@@ -61,12 +61,22 @@
         voiceC: voiceC || undefined,
         script,
         stability: stabilityFromSlider(),
+        similarity: parseInt(document.getElementById("similarity").value, 10) / 100,
+        modelId: document.getElementById("modelId").value,
+        previousText: document.getElementById("previousText").value.trim().slice(0, 100) || undefined,
+        futureText: document.getElementById("futureText").value.trim().slice(0, 100) || undefined,
+        addLocators: document.getElementById("addLocators").checked,
+        voiceFilter: typeof voiceFilterState === "function" ? voiceFilterState() : undefined,
       });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("script").focus();
       document.getElementById("stability").addEventListener("input", updateStabilityLabel);
+      document.getElementById("similarity").addEventListener("input", () => {
+        document.getElementById("similarityValue").textContent =
+          `${document.getElementById("similarity").value}%`;
+      });
       updateStabilityLabel();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeWithResult({ cancelled: true });
@@ -99,21 +109,32 @@
   <p class="hint script-hint">Prefix each line with <strong>A:</strong>, <strong>B:</strong>, or <strong>C:</strong> for speaker A, B, or C. Speaker C is only required when your script includes <strong>C:</strong> lines.</p>
   <p id="error" class="error" hidden></p>
 
+  {{VOICE_FILTER}}
   <div class="speaker-row">
     <label for="voiceA">Speaker A
-      <select id="voiceA">{{VOICE_OPTIONS_A}}</select>
+      <select id="voiceA" class="voice-pick">{{VOICE_OPTIONS_A}}</select>
     </label>
     <label for="voiceB">Speaker B
-      <select id="voiceB">{{VOICE_OPTIONS_B}}</select>
+      <select id="voiceB" class="voice-pick">{{VOICE_OPTIONS_B}}</select>
     </label>
     <label for="voiceC">Speaker C (optional)
-      <select id="voiceC">{{VOICE_OPTIONS_C}}</select>
+      <select id="voiceC" class="voice-pick">{{VOICE_OPTIONS_C}}</select>
     </label>
   </div>
 
   <label for="script">Dialogue script</label>
   <textarea id="script" placeholder="A: [giggling] Knock knock&#10;B: [curious] Who is there?&#10;C: [whispering] It's a secret!&#10;A: It's ElevenLabs!"></textarea>
 
+  <label for="modelId">Model</label>
+  <select id="modelId">
+    <option value="eleven_v3" selected>Eleven v3</option>
+    <option value="eleven_v4">Eleven v4 (90+ languages)</option>
+  </select>
+  <label for="previousText">Context before (optional, 100 chars)</label>
+  <input id="previousText" type="text" maxlength="100" placeholder="Text that came before this line" />
+  <label for="futureText">Context after (optional, 100 chars)</label>
+  <input id="futureText" type="text" maxlength="100" placeholder="Text that comes after this line" />
+  <label class="checkbox"><input id="addLocators" type="checkbox" /> Add arrangement locators at speaker turns</label>
   <label class="tempo-row">
     <span class="row-gutter" aria-hidden="true"></span>
     <span class="control-label">Stability</span>
@@ -121,6 +142,12 @@
     <span id="stabilityValue" class="slider-value">50%</span>
   </label>
   <p class="hint stability-hint">Lower stability = more expressive variation; higher = steadier, more consistent delivery.</p>
+  <label class="tempo-row">
+    <span class="row-gutter" aria-hidden="true"></span>
+    <span class="control-label">Similarity</span>
+    <input id="similarity" type="range" min="0" max="100" step="5" value="75" />
+    <span id="similarityValue" class="slider-value">75%</span>
+  </label>
 
   <p class="hint tag-hint">Steer performance with <strong>audio tags</strong> in square brackets inside each line — e.g. <strong>[whispering]</strong>, <strong>[laughs]</strong>, <strong>[excited]</strong>, <strong>[pause]</strong>. Tags apply to that speaker's line where you place them.</p>
   <p class="hint style-hint"><strong>Writing style</strong> also shapes delivery: punctuation, exclamation marks, and brief stage directions (e.g. <em>she said quietly</em>) influence tone and pacing. Keep the full script under ~2,000 characters per request.</p>

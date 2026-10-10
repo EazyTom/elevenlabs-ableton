@@ -14,6 +14,8 @@ export interface ImportClipArgs {
   duration?: number;
   isWarped?: boolean;
   looping?: boolean;
+  name?: string;
+  color?: number;
 }
 
 export function requireTempDirectory(context: ExtensionContext<"1.0.0">): string {
@@ -62,6 +64,8 @@ export async function importAndCreateClip(
   if (args.looping) {
     clip.looping = true;
   }
+  if (args.name) clip.name = args.name;
+  if (args.color !== undefined) clip.color = args.color;
 
   return imported;
 }

@@ -9,20 +9,20 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.7.0](CHANGELOG.md#v070)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.8.0](CHANGELOG.md#v080)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
 
 
 | Field                        | Value                                                         |
 | ---------------------------- | ------------------------------------------------------------- |
-| **Extension version**        | `0.7.0` — **27** context-menu features                        |
+| **Extension version**        | `0.8.0`                                                       |
 | **Ableton Extensions API**   | `1.0.0` (`minimumApiVersion` in `manifest.json`)              |
 | **Ableton SDK**              | `@ableton-extensions/sdk` **1.0.0-beta.1**                    |
-| **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.60.0**                       |
-| **Live requirement**         | **Live 12.4 Alpha/Beta** (Centercode) with Extensions enabled |
-| **Node.js** (dev/build only) | **≥ 24.16.0**                                                 |
+| **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.71.0**                       |
+| **Live requirement**         | **Live 12.4.15 beta** or **Live 13.0 beta** (Centercode) with Extensions enabled |
+| **Node.js** (dev/build only) | **≥ 24.16.0** (the Live Extension Host itself runs Node 24.14.1) |
 
 
-> Extensions are not available in retail Live builds today. You need a Live 12.4 program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
+> Extensions are not available in retail Live builds today. You need a Live 12.4.15 beta or Live 13.0 beta program build with Extensions support. **End users** install a packaged `.ablx` from [Releases](CHANGELOG.md); **developers** use `npm start` with **Developer Mode** (see [Getting started](#getting-started-git--github)).
 
 ## Overview
 
@@ -52,21 +52,21 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 
 | Category          | Actions                                                                                                              | Where                                              |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Generate**      | TTS (Flash v2.5 / Eleven v3), SFX, Music (v1/v2), Dialogue, **Music inpainting** (extend, regenerate, loop, similar) | Clip slot, arrangement selection, audio clip |
+| **Generate**      | TTS (Flash v2.5 / Eleven v4 / Eleven v3), SFX, Music (v2.5 default, v2, v1 deprecated), Dialogue (v3 / v4), **Music inpainting** (extend, regenerate, loop, similar) | Clip slot, arrangement selection, audio clip |
 | **Batch**         | TTS to multiple session slots                                                                                        | Multi-selected clip slots                          |
 | **Transform**     | Voice changer, vocal isolation (arrangement + Session clips/slots)                                                   | Arrangement selection, audio clip, audio clip slot |
 | **Stems**         | Separate into 2 or 6 stems → new tracks                                                                              | Audio clip, arrangement selection                  |
-| **Transcribe**    | Scribe STT (text modal)                                                                                              | Audio clip, arrangement selection                  |
+| **Transcribe**    | Scribe STT (text modal); optional arrangement locators                                                               | Audio clip, arrangement selection                  |
 | **Lyrics → MIDI** | Scribe word timestamps → MIDI markers                                                                                | Audio clip, arrangement selection                  |
 | **Align lyrics**  | Forced alignment with your transcript → MIDI                                                                         | Audio clip, arrangement selection                  |
 | **Samples**       | TTS / SFX into Simpler                                                                                               | Simpler device                                     |
 | **Drums**         | SFX into drum rack — seven pad slots, Build entire kit, Sequential or GM mapping                                     | Drum rack, MIDI clip slot                          |
-| **Voice**         | Library picker in modals                                                                                             | TTS, voice changer, dialogue                       |
+| **Voice**         | Library picker with search, gender, age, accent, language, and category filters                                      | TTS, voice changer, dialogue                       |
 | **Clone voice**   | Instant voice clone from audio                                                                                       | Audio clip, arrangement selection                  |
 | **Pronunciation** | Custom word pronunciation for TTS                                                                                    | Audio track (any)                                  |
 
 
-**v0.7.0** adds **Music inpainting** (Music v2): extend, regenerate section, seamless loop, and generate similar music on audio clips and arrangement selections. TTS modals include an **Eleven v3** model picker with audio-tag hints.
+**v0.8.0** adds **Music v2.5** (default), **Eleven v4** for dialogue and text-to-speech, arrangement locators, clip names and colors, and voice-picker filters. Generated clips are named and colored. It runs on **Live 12.4.15 beta** and **Live 13.0 beta**. Spec: [docs/v0.8.0-features.md](docs/v0.8.0-features.md).
 
 **v0.5.0** Session **Isolate Voice** on audio clip slots and clips replaces the clip in place and preserves loop settings.
 
@@ -113,11 +113,12 @@ Right-click an **audio clip slot** or **arrangement selection** → **Generate M
 | **Negative prompt**  | Optional comma-separated styles to avoid (e.g. vocals, distortion). Uses a **composition plan** with `negative_global_styles` instead of plain prompt mode.                                                    |
 | **Auto duration**    | Off by default — sends `music_length_ms` from the duration slider (default 30 s). Check to let the API pick length from the prompt.                                                                            |
 | **Quality**          | MP3 bitrates, PCM, or Opus (`output_format`). MP3 192 / PCM need Creator or Pro.                                                                                                                               |
-| **Model**            | **Music v2** (default) or **Music v1** — inline row, half-width dropdown. v2 supports inpainting and optional seed. |
+| **Model**            | **Music v2.5** (default), **Music v2**, or deprecated **Music v1**. v2 and v2.5 support inpainting. |
 | **Seamless Loop**    | Uses API `loop` generation mode; clip **Loop** is set in Live on import.                                                                                                                                       |
+| **Arrangement locators** | Arrangement only. Off by default. Adds a cue point per composition-plan section. |
 
 
-The composed prompt merges selected genres, optional tempo, and your description before calling the music API (direct `/v1/music` POST for v2 / loop support).
+The composed prompt merges selected genres, optional tempo, and your description before calling the music API. Extend, similar, and seamless-loop inpainting keep the generated length instead of cutting it back to the source clip. The inpaint modal chooses Music v2.5 or v2 and an output quality.
 
 #### Drum Rack SFX (`Drum Rack` / MIDI clip slot context menu)
 
@@ -142,7 +143,7 @@ Each enabled pad is a separate ElevenLabs API call (uses credits accordingly).
 ### Prerequisites
 
 1. **ElevenLabs account** with API access — [elevenlabs.io](https://elevenlabs.io)
-2. **Live 12.4 Alpha/Beta** with extensions enabled
+2. **Live 12.4.15 beta** or **Live 13.0 beta** with extensions enabled
 3. An **API key** (see below)
 
 ### Storage directory & API key
@@ -174,7 +175,7 @@ Tell the Extension Host which folder to use:
 | How you run the extension     | What to set                                                                                            |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **`npm start`** (development) | `ELEVENLABS_STORAGE_DIRECTORY` in project `.env` (see [Getting started](#getting-started-git--github)) |
-| **`extensions-cli run`** | `--storage-directory /path/to/your/folder`                                                             |
+| **`ableton-extensions-cli run`** | `--storage-directory /path/to/your/folder`                                                             |
 | **Either**                    | Environment variable `ELEVENLABS_STORAGE_DIRECTORY` (absolute path recommended)                        |
 
 
@@ -187,12 +188,12 @@ ELEVENLABS_STORAGE_DIRECTORY=C:\Users\You\Documents\ElevenLabs
 # ELEVENLABS_TEMP_DIRECTORY=C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp
 ```
 
-`npm start` reads `.env`, resolves the storage path, and passes `--storage-directory` and `--temp-directory` to `extensions-cli` automatically. If `ELEVENLABS_STORAGE_DIRECTORY` is unset, it looks for `api-key.txt` in the parent of the project folder, then in the project root (developer convenience only).
+`npm start` reads `.env`, resolves the storage path, and passes `--storage-directory` and `--temp-directory` to the Extensions CLI automatically. `npm run start:12` and `start:13` also pass `--live`. If `ELEVENLABS_STORAGE_DIRECTORY` is unset, it looks for `api-key.txt` in the parent of the project folder, then in the project root (developer convenience only).
 
 Manual launch (same paths as above):
 
 ```bash
-extensions-cli run --storage-directory "C:\Users\You\Documents\ElevenLabs" --temp-directory "C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp"
+ableton-extensions-cli run --storage-directory "C:\Users\You\Documents\ElevenLabs" --temp-directory "C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp"
 ```
 
 #### How the API key is resolved
@@ -216,7 +217,7 @@ Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem 
 
 ### Install & run (pre-built `.ablx`)
 
-Download `elevenlabs-ableton-0.7.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
+Download `elevenlabs-ableton-0.8.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
 
 1. Open **Live → Preferences → Extensions**
 2. **Drag and drop** the `.ablx` onto the Extensions page
@@ -224,7 +225,7 @@ Download `elevenlabs-ableton-0.7.0.ablx` from a [GitHub Release](CHANGELOG.md) (
 4. Configure your [API key and storage directory](#storage-directory--api-key)
 5. Right-click in Live — menu items are prefixed with **(ElevenLabs)**
 
-Developer Mode is **not** required for installed `.ablx` files; it is only needed when running from source via `npm start` / `extensions-cli run`.
+Developer Mode is **not** required for installed `.ablx` files; it is only needed when running from source via `npm start`.
 
 ### Persisted settings (in your storage directory)
 
@@ -252,7 +253,8 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules; enhanced SFX/Music/Drum Rack modals |
 | **0.5.0** | Session voice isolation; SFX/Music modal UX; Live tempo sync; audio-slot guards; UI layout polish               |
 | **0.6.0** | Drum Rack SFX pad-slot modal; API key onboarding & management; MIDI clip slot drum entry                        |
-| **0.7.0** | Music inpainting (extend/regenerate/loop/similar); Eleven v3 TTS; Music v2 defaults; table-driven context menus |
+| **0.7.0** | Music inpainting: extend, regenerate section, seamless loop, generate similar                                   |
+| **0.8.0** | Music v2.5, Eleven v4 speech and dialogue, arrangement locators, clip names and colors, voice filters, Live 12 and 13 beta support |
 
 
 Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.ts` → `FEATURE_VERSIONS`.
@@ -260,6 +262,19 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 ---
 
 ## Roadmap
+
+### Shipped (v0.8.0)
+
+- Music v2.5 default, with v2 and deprecated v1 still available
+- Eleven v4 dialogue (similarity, before/after context) and Eleven v4 in the text-to-speech picker
+- Arrangement locators for music sections, dialogue turns, and transcript sentences
+- Named, colored generated clips and named take lanes
+- Voice filters (search, gender, age, accent, language, category) plus cloned voices, up to 150 voices
+- Live 12.4.15 beta and Live 13.0 beta (`npm run start:12` / `start:13`)
+
+### Shipped (v0.7.0)
+
+- Music inpainting: Extend, Regenerate Section, Seamless Loop, Generate Similar
 
 ### Shipped (v0.6.0)
 
@@ -280,19 +295,20 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 - Pronunciation dictionary rules (auto-applied to TTS)
 - SFX / Music / Drum Rack modals — sliders, models, loops, randomizers, music session multi-variant clip loading
 
-### Planned (v0.6.0+)
+### Planned
 
 
-| Priority | Feature                                                  |
-| -------- | -------------------------------------------------------- |
-| High     | Settings / voice manager (cloned voices + pronunciation) |
-| High     | Voice picker search + pagination                         |
-| Medium   | TTS model picker + character/usage hint                  |
-| Medium   | TTS timestamps → MIDI lyric markers                      |
-| Later    | Voice design, dubbing, cue-point TTS                     |
+| Priority | Feature |
+| -------- | ------- |
+| Medium   | TTS word timestamps → MIDI lyric markers |
+| Medium   | Character or quota hint in generation modals |
+| Medium   | Place generated audio on existing cue points |
+| Later    | Music finetunes, waveform preview, editable transcripts |
+| Later    | Voice design, dubbing, generation history |
+| Later    | User-edited music section plan |
 
 
-Details: [docs/roadmap.md](docs/roadmap.md)
+Details: [docs/roadmap.md](docs/roadmap.md) and [docs/v0.8.0-features.md](docs/v0.8.0-features.md).
 
 ---
 
@@ -308,7 +324,7 @@ Context menu → command → modal (optional) → progress dialog
 
 Outbound audio (voice change, STT, stems, clone): `renderPreFxAudio` → ElevenLabs file APIs.
 
-All dependencies are **bundled** into `dist/extension.js` (~8 MB) via esbuild. The Extension Host does not resolve `node_modules` at runtime.
+All dependencies are **bundled** into `dist/extension.js` (~5.2 MB) via esbuild. The Extension Host does not resolve `node_modules` at runtime.
 
 ### Project structure
 
@@ -322,7 +338,7 @@ elevenlabs-ableton/
 │   ├── version.ts         # EXTENSION_VERSION + FEATURE_VERSIONS
 │   ├── elevenlabs-client.ts
 │   ├── pipelines.ts
-│   ├── audio-io.ts / live-io.ts / midi-io.ts / …
+│   ├── audio-io.ts / live-io.ts / midi-io.ts / live-markers.ts / clip-metadata.ts
 │   ├── multipart-upload.ts # Manual multipart for Extension Host file APIs
 │   ├── ui-branding.ts     # Modal logo + shared dark theme
 │   ├── ui.ts + ui/*.html  # Live webview modals
@@ -342,12 +358,12 @@ Deeper context: [docs/project-context.md](docs/project-context.md), [../ABLETON-
 
 | Package                     | Version                        | Role                              |
 | --------------------------- | ------------------------------ | --------------------------------- |
-| `@ableton-extensions/sdk`   | `1.0.0-beta.0` (vendor `.tgz`) | Live object model, UI, resources  |
-| `@ableton-extensions/cli`   | `1.0.0-beta.0` (vendor `.tgz`) | `extensions-cli run` / `package`  |
-| `@elevenlabs/elevenlabs-js` | `^2.51.0`                      | ElevenLabs API (bundled)          |
+| `@ableton-extensions/sdk`   | `1.0.0-beta.1` (vendor `.tgz`) | Live object model, UI, resources. API stays `1.0.0`. |
+| `@ableton-extensions/cli`   | `1.0.0-beta.1` (vendor `.tgz`) | `ableton-extensions-cli package`; dev run via `scripts/start-dev.ts` |
+| `@elevenlabs/elevenlabs-js` | `^2.71.0`                      | ElevenLabs API (bundled)          |
 | `fflate`                    | `^0.8.3`                       | Stem separation ZIP extraction    |
-| `esbuild`                   | `0.28.0`                       | Production bundle                 |
-| `typescript`                | `^5.9.3`                       | Type-check (`skipLibCheck: true`) |
+| `esbuild`                   | `0.28.2`                       | Production bundle                 |
+| `typescript`                | `^7.0.2`                       | Type-check (`skipLibCheck: true`) |
 
 
 Ableton extensions docs: [ableton.github.io/extensions-sdk](https://ableton.github.io/extensions-sdk/)
@@ -369,15 +385,15 @@ cd elevenlabs-ableton
 npm install
 ```
 
-Requires **Node.js ≥ 24.14.1** (matches `package.json` `engines`).
+Requires **Node.js ≥ 24.16.0** for building (`package.json` `engines`). The Extension Host bundled with Live runs Node 24.14.1, so extension code must not use Node APIs newer than that.
 
 ### 3. Add Ableton SDK vendor packages
 
 `package.json` references local tarballs (not published to npm):
 
 ```text
-vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz
-vendor/ableton-extensions-cli-1.0.0-beta.0.tgz
+vendor/ableton-extensions-sdk-1.0.0-beta.1.tgz
+vendor/ableton-extensions-cli-1.0.0-beta.1.tgz
 ```
 
 Obtain these from the [Ableton Extensions SDK](https://ableton.github.io/extensions-sdk/) release (or your SDK dev kit) and place them in `vendor/` before `npm install`. Without them, install will fail.
@@ -387,7 +403,9 @@ Obtain these from the [Ableton Extensions SDK](https://ableton.github.io/extensi
 Create or edit `.env` in the project root (gitignored):
 
 ```env
-EXTENSION_HOST_PATH=C:\Path\To\Live\Resources\Extensions\ExtensionHostNodeModule.node
+EXTENSION_HOST_PATH=C:\Path\To\Live\Program\ExtensionHost\ExtensionHostNodeModule.node
+# Optional when more than one beta is installed: 12 or 13
+# ABLETON_LIVE=12
 ```
 
 The path is set when you scaffold with `@ableton-extensions/create-extension`; adjust if Live is installed elsewhere.
@@ -419,12 +437,10 @@ You still need `--storage-directory` (or `ELEVENLABS_STORAGE_DIRECTORY`) if you 
 ### 6. Build and run in Live
 
 ```bash
-# Development (source maps, not minified) — uses .env storage + temp paths
+# Development (source maps, not minified) — newest installed beta, or ABLETON_LIVE / EXTENSION_HOST_PATH
 npm start
-
-# Or explicitly (replace with your storage folder from step 5):
-npm run build:dev
-extensions-cli run --storage-directory "C:\Users\You\Documents\ElevenLabs" --temp-directory "C:\Users\You\Documents\ElevenLabs\.elevenlabs-temp"
+npm run start:12
+npm run start:13
 ```
 
 ```bash
@@ -437,24 +453,24 @@ npm run package
 
 ### 7. Enable in Live
 
-1. Open **Live 12.4 Alpha/Beta**
+1. Open **Live 12.4.15 beta** or **Live 13.0 beta**
 2. Preferences → **Extensions** → enable **Developer Mode**
-3. Run `npm start` (or `extensions-cli run`) so Live loads the extension
-4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.7.0 active — 27 features`
+3. Run `npm start`, `npm run start:12`, or `npm run start:13` so Live loads the extension
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.8.0 active`
 
 ---
 
 ## Package for release
 
-From the project root, with **Node.js ≥ 24.14.1** and `vendor/*.tgz` SDK packages installed:
+From the project root, with **Node.js ≥ 24.16.0** and `vendor/*.tgz` SDK packages installed:
 
 ```bash
 npm install
 npm run check:api          # optional — needs ELEVENLABS_API_KEY
-npm run package            # production build + elevenlabs-ableton-0.7.0.ablx
+npm run package            # production build + elevenlabs-ableton-0.8.0.ablx
 ```
 
-`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v060).
+`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `ableton-extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v080).
 
 Manual steps before tagging: align versions in `src/version.ts`, `manifest.json`, and `package.json`; run [docs/pre-release-checklist.md](docs/pre-release-checklist.md).
 
@@ -496,13 +512,16 @@ This project uses [BMad](https://docs.bmad-method.org/) for planning artifacts:
 
 | Script                   | Description                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------- |
-| `npm start`              | `build:dev` then `extensions-cli run`                                           |
+| `npm start`              | Dev bundle, then connect to Live (`start:12` / `start:13` pick a beta)         |
 | `npm run build`          | Type-check + production bundle → `dist/extension.js` (runs `check:build` after) |
 | `npm run build:dev`      | Type-check + dev bundle (source maps)                                           |
-| `npm run package`        | Production build + create `.ablx` archive                                       |
-| `npm run check:build`    | Post-build: version sync, bundle markers, unit checks (no API key)              |
-| `npm run check:api`      | Above + ElevenLabs API smoke (TTS + voices; needs API key)                      |
-| `npm run check:api:full` | Above + SFX test (extra API cost)                                               |
+| `npm run package`        | Production build + `ableton-extensions-cli package`                             |
+| `npm run smoke`          | Build, fake-host commands, and API smoke. Does not start or connect to Live    |
+| `npm run smoke -- --music` | Smoke plus the music v2.5 credit test                                         |
+| `npm run check:build`    | Version sync, bundle markers, unit checks (no API key)                          |
+| `npm run check:api`      | Above plus voices, speech, v4 dialogue, SFX, and Scribe (needs an API key)      |
+| `npm run smoke:live:12`  | Live self-test. Open Live 12 yourself first                                    |
+| `npm run smoke:live:13`  | Live self-test. Open Live 13 yourself first                                    |
 
 
 ```bash
@@ -521,11 +540,12 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 
 | Document                                                               | Audience                           |
 | ---------------------------------------------------------------------- | ---------------------------------- |
-| [CHANGELOG.md](CHANGELOG.md)                                           | Release notes (v0.1.0 → v0.6.0)    |
+| [CHANGELOG.md](CHANGELOG.md)                                           | Release notes (v0.1.0 → v0.8.0)    |
 | [SUMMARY.md](SUMMARY.md)                                               | Table of contents for this README  |
 | [LICENSE](LICENSE)                                                     | GPL-3.0-or-later terms             |
 | [docs/roadmap.md](docs/roadmap.md)                                     | Planned features                   |
-| [docs/v0.6.0-features.md](docs/v0.6.0-features.md)                     | Latest feature spec                |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md)                     | Current feature spec               |
+| [docs/v0.6.0-features.md](docs/v0.6.0-features.md)                     | v0.6.0 Drum Rack and API key spec  |
 | [docs/v0.5.0-features.md](docs/v0.5.0-features.md)                     | v0.5.0 feature spec                |
 | [docs/v0.4.0-features.md](docs/v0.4.0-features.md)                     | v0.4.0 feature spec                |
 | [docs/code-review-notes.md](docs/code-review-notes.md)                 | Architecture review notes          |
@@ -556,6 +576,6 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 ```bash
 npm install
 npm run build
-# expect: dist/extension.js ~8 MB, exit 0
+# expect: dist/extension.js ~5.2 MB, exit 0
 ```
 

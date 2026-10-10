@@ -9,30 +9,48 @@
 | **0.3.0** | Voice picker, text-to-dialogue, drum rack SFX, transcribe → MIDI |
 | **0.4.0** | Stem separation, voice clone, forced alignment → MIDI, pronunciation rules, refactor |
 | **0.5.0** | Session voice isolation, modal UX/tempo sync, audio-slot guards, UI layout |
-| **0.6.0** | Drum Rack SFX pad-slot modal, API key onboarding & management, MIDI clip slot drum entry |
+| **0.6.0** | Drum Rack SFX pad slots, API key onboarding, MIDI clip slot drum entry |
+| **0.7.0** | Music inpainting: extend, regenerate, seamless loop, similar |
+| **0.8.0** | Music v2.5, Eleven v4 speech and dialogue, locators, clip names and colors, voice filters, Live 12 and 13 beta |
 
----
+Spec: [v0.8.0-features.md](v0.8.0-features.md).
 
-## Surface coverage (v0.4.0)
+## Still planned
+
+These are not in 0.8.0. The older tier lists below are the v0.5 planning notes; several of those items have since shipped (voice filters, TTS model picker, cue points for generated audio, cloned voices in the picker, dialogue speakers A/B/C).
+
+| Feature | Why it is still open |
+| --- | --- |
+| TTS word timestamps → MIDI | Speech timing exists for dialogue. Plain TTS does not yet write lyric notes. |
+| Character or quota hint | Avoids surprise bills. No usage call in the modals yet. |
+| Place audio on existing cue points | 0.8.0 creates locators. It does not start a generation at a cue the user already made. |
+| User-edited music sections | Composition plans are built from prompts and negative styles, not edited section by section. |
+| Music finetunes | Training workflow. Deferred past 0.8.0. |
+| Waveform preview | The detailed music response can include a waveform. The Live modal cannot draw it while open. |
+| Editable Scribe transcript | Word times exist. There is no editor that writes corrections back. |
+| Voice design, dubbing, generation history | Separate ElevenLabs products. High complexity. |
+| ElevenLabs SDK 3.x | Stay on 2.x until the Extension Host bundle is proven with 3.x. |
+| Experimental Live API 1.0.1 | Hosts accept it only with an experimental flag. This extension stays on 1.0.0. |
+
+## Surface coverage (as of v0.8.0)
 
 ### `@elevenlabs/elevenlabs-js` — client resources
 
 | Client | Used in extension | Notes |
 |--------|-------------------|-------|
-| `textToSpeech` | ✓ `convert` | Default model `eleven_flash_v2_5`; pronunciation locators |
-| `textToSoundEffects` | ✓ `convert` | |
-| `music` | ✓ `compose`, `separateStems` | Not using `stream`, `composeDetailed`, `videoToMusic`, `upload` |
-| `textToDialogue` | ✓ `convert` | Two-speaker script only |
+| `textToSpeech` | ✓ `convert` | Flash v2.5 (default), Eleven v4, Eleven v3. Pronunciation locators except on v3. `convertWithTimestamps`, `stream`, and `streamWithTimestamps` are unused |
+| `textToSoundEffects` | ✓ `convert` | `eleven_text_to_sound_v2` only |
+| `music` | ✓ `composeDetailed`, `compose`, `separateStems` | Default `music_v2_5`. Not using `stream`, `videoToMusic`, finetune, or waveform preview |
+| `textToDialogue` | ✓ `convert`, `convertWithTimestamps` | Speakers A/B/C. Models `eleven_v3` and `eleven_v4` |
 | `speechToSpeech` | ✓ `convert` | Voice changer |
 | `audioIsolation` | ✓ `convert` | Vocal isolation |
 | `speechToText` | ✓ `convert` | Scribe `scribe_v2` |
 | `forcedAlignment` | ✓ `create` | User transcript → MIDI |
-| `voices` | ✓ `search`, `ivc.create` | Page 1 only; no pagination |
+| `voices` | ✓ `search`, `ivc.create` | Up to 3 pages. Client-side filters. Cloned voices merged |
 | `pronunciationDictionaries` | ✓ `createFromRules` | Single-rule create; not `list` / `get` UI |
-| `textToSpeech` | ○ unused | `convertWithTimestamps`, `stream`, `streamWithTimestamps` |
 | `textToVoice` | ○ | Voice design / remix from prompt |
 | `dubbing` | ○ | Async dubbing jobs |
-| `models` | ○ | Model picker in modals |
+| `models` | ○ | Pickers are hardcoded lists, not `models.list` |
 | `usage` / `workspace` | ○ | Cost / quota preview |
 | `history` | ○ | Re-use past generations |
 | `conversationalAi` / `speechEngine` | ○ | Real-time agents — high complexity |
@@ -52,7 +70,7 @@
 | `DrumRack` / MIDI `ClipSlot` | Drum Rack SFX (7 pad slots) |
 | `MidiTrack` | Created for lyric markers (not a context menu scope) |
 
-**Not yet used:** `Song.cuePoints`, `MidiTrack`/`MidiClip` direct menus, `DeviceParameter` automation, `WarpMode` post-import, `Scene` scope.
+**Not yet used:** placing clips on existing `Song.cuePoints`, `MidiTrack`/`MidiClip` direct menus, `DeviceParameter` automation, `WarpMode` post-import, `Scene` scope. Generated audio can create cue points.
 
 ---
 
@@ -105,6 +123,10 @@ Prioritized by **value × utility ÷ complexity**.
 
 ---
 
+## Historical v0.5.0 planning notes
+
+The tiers below were written before 0.6.0–0.8.0. Do not treat them as the current backlog. Use [Still planned](#still-planned).
+
 ## Recommended v0.5.0 release scope
 
 Ship these five for a strong release:
@@ -124,8 +146,11 @@ Plus: `npm run check:api` documented in README for pre-share validation.
 ```bash
 npm run build              # runs postbuild → check:build
 npm run check:build        # bundle + unit checks (no API key)
-npm run check:api            # + API smoke (TTS + voices)
-npm run check:api:full       # + SFX (extra cost)
+npm run check:api          # voices, speech, v4 dialogue, SFX, Scribe
+npm run smoke              # build + fake host + API. Does not start Live
+npm run smoke -- --music   # also music v2.5 compose + inpaint (credits)
 ```
+
+`npm run check:api:full` remains as a script name. SFX is already part of `npm run check:api`.
 
 See [pre-release-checklist.md](pre-release-checklist.md).

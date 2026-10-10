@@ -52,6 +52,14 @@ export interface ExtensionStorageConfig {
   activePronunciationDictionaryId?: string;
   drumKit?: StoredDrumKitSettings;
   songs?: StoredSong[];
+  voiceFilter?: {
+    search?: string;
+    gender?: string;
+    age?: string;
+    accent?: string;
+    language?: string;
+    category?: string;
+  };
 }
 
 /** @deprecated Use StoredDrumPadSettings */
@@ -120,6 +128,7 @@ export async function loadStorageConfig(
       activePronunciationDictionaryId: parsed.activePronunciationDictionaryId,
       drumKit: normalizeStoredDrumKit(parsed.drumKit),
       songs: parsed.songs ?? [],
+      voiceFilter: parsed.voiceFilter,
     };
   } catch {
     return { ...EMPTY_CONFIG };

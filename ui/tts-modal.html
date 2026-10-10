@@ -60,6 +60,7 @@
         stability: stabilityValue(),
         similarityBoost: sliderValue("similarity"),
         style: sliderValue("style"),
+        voiceFilter: typeof voiceFilterState === "function" ? voiceFilterState() : undefined,
       });
     }
 
@@ -107,11 +108,13 @@
   <label for="modelId">Model</label>
   <select id="modelId">
     <option value="eleven_flash_v2_5" selected>Flash v2.5 (fast, default)</option>
+    <option value="eleven_v4">Eleven v4</option>
     <option value="eleven_v3">Eleven v3 (expressive quality)</option>
   </select>
 
+  {{VOICE_FILTER}}
   <label for="voiceSelect">Voice (from library)</label>
-  <select id="voiceSelect" onchange="onVoiceSelect()">{{VOICE_OPTIONS}}</select>
+  <select id="voiceSelect" class="voice-pick" onchange="onVoiceSelect()">{{VOICE_OPTIONS}}</select>
 
   <label for="voiceId">Voice ID (override or custom)</label>
   <input id="voiceId" type="text" placeholder="Leave blank for default" />

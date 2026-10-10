@@ -43,7 +43,7 @@ import {
   DRUM_TYPES,
   DRUM_PITCH_KEY_OPTIONS,
 } from "./drum-kit.js";
-import { parseAudioOutputFormat } from "./audio-output-formats.js";
+import { parseAudioOutputFormat, parseMusicOutputFormat } from "./audio-output-formats.js";
 import { SFX_MODEL_V2 } from "./elevenlabs-client.js";
 import { clampMusicLengthMs } from "./music-length.js";
 import { buildMusicPromptRandomizerScript, musicForceInstrumental } from "./music-prompt.js";
@@ -54,7 +54,9 @@ import { MODAL_HEADER_EXTRA_HEIGHT, prepareModalHtml } from "./ui-branding.js";
 import { getCachedVoices, setCachedVoices } from "./voice-cache.js";
 import {
   getDrumKitSettings,
+  loadStorageConfig,
   saveDrumKitSettings,
+  saveStorageConfig,
   type StoredDrumKitSettings,
 } from "./storage.js";
 import type {
@@ -240,7 +242,20 @@ async function fetchVoices(context: ExtensionContext): Promise<VoiceSummary[]> {
 
   const client = createClient(apiKey);
   try {
-    const voices = await listVoices(client);
+    const listed = await listVoices(client);
+    const config = await loadStorageConfig(context.environment.storageDirectory);
+    const cloned = (config.clonedVoices ?? []).map((voice) => ({
+      voiceId: voice.voiceId,
+      name: voice.name,
+      category: "cloned",
+      gender: "",
+      age: "",
+      accent: "",
+      language: "",
+      useCase: "",
+    }));
+    const seen = new Set(listed.voices.map((voice) => voice.voiceId));
+    const voices = [...cloned.filter((voice) => !seen.has(voice.voiceId)), ...listed.voices];
     setCachedVoices(voices);
     return voices;
   } catch (err) {
@@ -407,6 +422,93 @@ function injectVoiceOptions(template: string, voices: VoiceSummary[]): string {
   return template.replace(/\{\{VOICE_OPTIONS\}\}/g, options);
 }
 
+function uniqueValues(voices: VoiceSummary[], key: keyof VoiceSummary): string[] {
+  return [...new Set(voices.map((voice) => String(voice[key] ?? "")).filter(Boolean))].sort();
+}
+
+function filterSelect(id: string, label: string, values: string[], selected: string | undefined): string {
+  const options = ['<option value="">Any</option>']
+    .concat(values.map((value) => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`))
+    .join("");
+  return `<label>${label}<select id="${id}" class="vf">${options}</select></label>`;
+}
+
+/** Client-side voice filters. The modal cannot call the host while it is open. */
+export function buildVoiceFilterHtml(
+  voices: VoiceSummary[],
+  saved?: { search?: string; gender?: string; age?: string; accent?: string; language?: string; category?: string },
+): string {
+  const data = JSON.stringify(voices).replace(/</g, "\\u003c");
+  return `<div class="speaker-row">
+    <label>Search<input id="vfSearch" type="text" value="${escapeHtml(saved?.search ?? "")}" /></label>
+    ${filterSelect("vfGender", "Gender", uniqueValues(voices, "gender"), saved?.gender)}
+    ${filterSelect("vfAge", "Age", uniqueValues(voices, "age"), saved?.age)}
+    ${filterSelect("vfAccent", "Accent", uniqueValues(voices, "accent"), saved?.accent)}
+    ${filterSelect("vfLanguage", "Language", uniqueValues(voices, "language"), saved?.language)}
+    ${filterSelect("vfCategory", "Category", uniqueValues(voices, "category"), saved?.category)}
+  </div>
+  <script>
+    const EL_VOICES = ${data};
+    function voiceFilterState() {
+      const value = (id) => document.getElementById(id)?.value ?? "";
+      return {
+        search: value("vfSearch"),
+        gender: value("vfGender"),
+        age: value("vfAge"),
+        accent: value("vfAccent"),
+        language: value("vfLanguage"),
+        category: value("vfCategory"),
+      };
+    }
+    function applyVoiceFilters() {
+      const filter = voiceFilterState();
+      const query = filter.search.trim().toLowerCase();
+      const matched = EL_VOICES.filter((voice) => {
+        if (query && !voice.name.toLowerCase().includes(query) && !voice.voiceId.toLowerCase().includes(query)) return false;
+        if (filter.gender && voice.gender !== filter.gender) return false;
+        if (filter.age && voice.age !== filter.age) return false;
+        if (filter.accent && voice.accent !== filter.accent) return false;
+        if (filter.language && voice.language !== filter.language) return false;
+        if (filter.category && voice.category !== filter.category) return false;
+        return true;
+      });
+      for (const select of document.querySelectorAll("select.voice-pick")) {
+        const current = select.value;
+        const blank = select.querySelector("option[value='']");
+        select.innerHTML = "";
+        if (blank) select.appendChild(blank);
+        for (const voice of matched) {
+          const option = document.createElement("option");
+          option.value = voice.voiceId;
+          option.textContent = voice.name;
+          select.appendChild(option);
+        }
+        if ([...select.options].some((option) => option.value === current)) select.value = current;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      for (const id of ["vfSearch", "vfGender", "vfAge", "vfAccent", "vfLanguage", "vfCategory"]) {
+        document.getElementById(id)?.addEventListener("input", applyVoiceFilters);
+        document.getElementById(id)?.addEventListener("change", applyVoiceFilters);
+      }
+    });
+  </script>`;
+}
+
+async function rememberVoiceFilter(
+  context: ExtensionContext,
+  filter: ExtensionStorageConfigVoiceFilter | undefined,
+): Promise<void> {
+  if (!filter) return;
+  const config = await loadStorageConfig(context.environment.storageDirectory);
+  config.voiceFilter = filter;
+  await saveStorageConfig(context.environment.storageDirectory, config);
+}
+
+type ExtensionStorageConfigVoiceFilter = NonNullable<
+  Awaited<ReturnType<typeof loadStorageConfig>>["voiceFilter"]
+>;
+
 function clampLiveTempoForSlider(tempo: number): number {
   if (!Number.isFinite(tempo)) return 120;
   return Math.min(200, Math.max(40, Math.round(tempo)));
@@ -431,8 +533,13 @@ function normalizeMusicModalResult(parsed: MusicModalResult): MusicModalResult {
     musicLengthMs,
     forceInstrumental: musicForceInstrumental(parsed),
     variants: clampMusicVariants(parsed.variants),
-    modelId: parsed.modelId === "music_v1" ? "music_v1" : "music_v2",
-    outputFormat: parseAudioOutputFormat(parsed.outputFormat),
+    modelId:
+      parsed.modelId === "music_v1"
+        ? "music_v1"
+        : parsed.modelId === "music_v2"
+          ? "music_v2"
+          : "music_v2_5",
+    outputFormat: parseMusicOutputFormat(parsed.outputFormat),
     promptInfluence: parsed.promptInfluence ?? 0.3,
     negativePrompt: negativePrompt || undefined,
   };
@@ -505,16 +612,45 @@ async function showModal<T>(
   return parseJson<T>(raw);
 }
 
+async function withVoiceFilter(context: ExtensionContext, template: string, voices: VoiceSummary[]): Promise<string> {
+  const config = await loadStorageConfig(context.environment.storageDirectory);
+  return template.replace("{{VOICE_FILTER}}", buildVoiceFilterHtml(voices, config.voiceFilter));
+}
+
+const locatorOptionHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" />
+<script>
+function doSendMessage(message){ if(window.webkit?.messageHandlers?.live) window.webkit.messageHandlers.live.postMessage(message); else if(window.chrome?.webview) window.chrome.webview.postMessage(message); }
+function closeWithResult(result){ doSendMessage({ method:"close_and_send", params:[JSON.stringify(result)] }); }
+</script></head><body>
+<label class="checkbox"><input id="addLocators" type="checkbox" /> Add arrangement locators</label>
+<div class="buttons">
+<button type="button" onclick="closeWithResult({cancelled:true})">Skip</button>
+<button type="button" class="primary" onclick="closeWithResult({cancelled:false, addLocators:document.getElementById('addLocators').checked})">Continue</button>
+</div></body></html>`;
+
+export async function promptAddLocators(context: ExtensionContext): Promise<boolean | null> {
+  const parsed = await showModal<{ cancelled?: boolean; addLocators?: boolean }>(
+    context,
+    locatorOptionHtml,
+    360,
+    140,
+    "Arrangement locators",
+  );
+  return parsed.cancelled ? null : parsed.addLocators === true;
+}
+
 export async function promptTts(context: ExtensionContext): Promise<TextVoiceModalResult | null> {
   const voices = await fetchVoices(context);
+  const html = await withVoiceFilter(context, injectVoiceOptions(ttsModalHtml, voices), voices);
   const parsed = await showModal<TextVoiceModalResult>(
     context,
-    injectVoiceOptions(ttsModalHtml, voices),
+    html,
     420,
     520,
     "Text-to-Speech",
   );
   if (parsed.cancelled || !parsed.text?.trim()) return null;
+  await rememberVoiceFilter(context, parsed.voiceFilter);
   return parsed;
 }
 
@@ -562,11 +698,15 @@ export async function promptMusicInpaint(
     context,
     prepareModalHtml(html, titles[mode]),
     460,
-    420,
+    520,
     titles[mode],
   );
   if (parsed.cancelled) return null;
-  return parsed;
+  return {
+    ...parsed,
+    modelId: parsed.modelId === "music_v2" ? "music_v2" : "music_v2_5",
+    outputFormat: parseMusicOutputFormat(parsed.outputFormat),
+  };
 }
 
 export async function promptMusic(context: ExtensionContext): Promise<MusicModalResult | null> {
@@ -584,28 +724,35 @@ export async function promptMusic(context: ExtensionContext): Promise<MusicModal
 
 export async function promptVoice(context: ExtensionContext): Promise<VoiceOnlyModalResult | null> {
   const voices = await fetchVoices(context);
+  const html = await withVoiceFilter(context, injectVoiceOptions(voiceModalHtml, voices), voices);
   const parsed = await showModal<VoiceOnlyModalResult>(
     context,
-    injectVoiceOptions(voiceModalHtml, voices),
-    400,
-    260,
+    html,
+    460,
+    420,
     "Voice selection",
   );
   if (parsed.cancelled || !parsed.voiceId?.trim()) return null;
+  await rememberVoiceFilter(context, parsed.voiceFilter);
   return parsed;
 }
 
 export async function promptDialogue(context: ExtensionContext): Promise<DialogueModalResult | null> {
   const voices = await fetchVoices(context);
   const options = buildVoiceOptionsHtml(voices);
-  const html = dialogueModalHtml
-    .replace("{{VOICE_OPTIONS_A}}", options)
-    .replace("{{VOICE_OPTIONS_B}}", options)
-    .replace("{{VOICE_OPTIONS_C}}", options);
-  const parsed = await showModal<DialogueModalResult>(context, html, 480, 520, "Text to dialogue");
+  const html = await withVoiceFilter(
+    context,
+    dialogueModalHtml
+      .replace("{{VOICE_OPTIONS_A}}", options)
+      .replace("{{VOICE_OPTIONS_B}}", options)
+      .replace("{{VOICE_OPTIONS_C}}", options),
+    voices,
+  );
+  const parsed = await showModal<DialogueModalResult>(context, html, 520, 760, "Text to dialogue");
   if (parsed.cancelled || !parsed.script?.trim() || !parsed.voiceA || !parsed.voiceB) {
     return null;
   }
+  await rememberVoiceFilter(context, parsed.voiceFilter);
   const validationError = validateDialogueInput(parsed.script, {
     voiceA: parsed.voiceA,
     voiceB: parsed.voiceB,

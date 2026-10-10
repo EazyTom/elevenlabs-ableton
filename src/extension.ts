@@ -58,12 +58,14 @@ import {
   promptSfx,
   promptStemSeparation,
   promptTts,
+  promptAddLocators,
   promptVoice,
   showTranscript,
 } from "./ui.js";
 import { DEFAULT_VOICE_ID, generateTts } from "./elevenlabs-client.js";
 import { getActivePronunciationDictionary, loadStorageConfig } from "./storage.js";
 import type { MusicInpaintMode } from "./types.js";
+import { runLiveSelfTest } from "./selftest.js";
 import { EXTENSION_VERSION, logExtensionInfo } from "./version.js";
 
 function runSafe(fn: () => Promise<void>): void {
@@ -149,7 +151,10 @@ async function handleMusicInpaintArrangement(
 
 export function activate(activation: ActivationContext) {
   const context = initialize(activation, "1.0.0");
-  logExtensionInfo();
+  logExtensionInfo({ language: context.environment.language });
+  if (process.env.ELEVENLABS_SELFTEST === "1") {
+    void runLiveSelfTest(context);
+  }
 
   register(context, COMMANDS.ttsClipSlot, (arg) => {
     runSafe(async () => {
@@ -312,12 +317,17 @@ export function activate(activation: ActivationContext) {
       const selection = arg as ArrangementSelection;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
+      const addLocators = await promptAddLocators(context);
+      if (addLocators === null) return;
       const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
         selection.time_selection_end,
       );
-      await pipelineTranscribe(context, audioPath, (t) => showTranscript(context, t));
+      await pipelineTranscribe(context, audioPath, (t) => showTranscript(context, t), {
+        addLocators,
+        clipStartBeat: selection.time_selection_start,
+      });
     });
   });
 
@@ -397,6 +407,8 @@ export function activate(activation: ActivationContext) {
       const selection = arg as ArrangementSelection;
       const track = getPrimaryAudioTrack(context, selection);
       if (!track) return;
+      const addLocators = await promptAddLocators(context);
+      if (addLocators === null) return;
       const audioPath = await context.resources.renderPreFxAudio(
         track,
         selection.time_selection_start,
@@ -408,6 +420,7 @@ export function activate(activation: ActivationContext) {
         audioPath,
         selection.time_selection_start,
         duration > 0 ? duration : 4,
+        addLocators,
       );
     });
   });

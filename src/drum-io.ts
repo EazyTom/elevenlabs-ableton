@@ -47,22 +47,25 @@ export async function ensureSimplerOnPad(
   const existing = findSimplerOnPad(drumRack, midiNote);
   if (existing) return existing;
 
-  return context.withinTransaction(async () => {
+  return context.withinTransaction(() => {
     let chain = findDrumChainByNote(drumRack, midiNote);
-    if (!chain) {
-      const inserted = await drumRack.insertChain(drumRack.chains.length);
-      if (!(inserted instanceof DrumChain)) {
-        throw new Error(`Could not create drum pad at MIDI note ${midiNote}.`);
-      }
-      inserted.receivingNote = midiNote;
-      chain = inserted;
-    }
-
-    const device = await chain.insertDevice("Simpler", 0);
-    if (!(device instanceof Simpler)) {
-      throw new Error(`Could not insert Simpler on MIDI note ${midiNote}.`);
-    }
-    return device;
+    const chainReady = chain
+      ? Promise.resolve(chain)
+      : drumRack.insertChain(drumRack.chains.length).then((inserted) => {
+          if (!(inserted instanceof DrumChain)) {
+            throw new Error(`Could not create drum pad at MIDI note ${midiNote}.`);
+          }
+          inserted.receivingNote = midiNote;
+          return inserted;
+        });
+    return chainReady.then((ready) =>
+      ready.insertDevice("Simpler", 0).then((device) => {
+        if (!(device instanceof Simpler)) {
+          throw new Error(`Could not insert Simpler on MIDI note ${midiNote}.`);
+        }
+        return device;
+      }),
+    );
   });
 }
 
@@ -87,13 +90,14 @@ export async function insertEmptyDrumRackOnTrack(
   context: ExtensionContext,
   track: MidiTrack<"1.0.0">,
 ): Promise<DrumRack<"1.0.0">> {
-  return context.withinTransaction(async () => {
-    const device = await track.insertDevice(EMPTY_DRUM_RACK_DEVICE, 0);
-    if (!(device instanceof DrumRack)) {
-      throw new Error("Could not insert Drum Rack on this track.");
-    }
-    return device;
-  });
+  return context.withinTransaction(() =>
+    track.insertDevice(EMPTY_DRUM_RACK_DEVICE, 0).then((device) => {
+      if (!(device instanceof DrumRack)) {
+        throw new Error("Could not insert Drum Rack on this track.");
+      }
+      return device;
+    }),
+  );
 }
 
 /**

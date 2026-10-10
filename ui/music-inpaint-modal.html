@@ -30,6 +30,8 @@
         glueSec: document.getElementById("glueSec") ? num("glueSec") : undefined,
         prompt: document.getElementById("prompt")?.value.trim() || undefined,
         durationSec: document.getElementById("durationSec") ? num("durationSec") : undefined,
+        modelId: document.getElementById("modelId").value,
+        outputFormat: document.getElementById("outputFormat").value,
       });
     }
     document.addEventListener("DOMContentLoaded", () => {
@@ -42,10 +44,27 @@
   </style>
 </head>
 <body>
-  <p class="hint">Music inpainting uses credits for the full output duration (including kept audio). Requires Music v2.</p>
+  <p class="hint">Music inpainting uses credits for the full output duration (including kept audio).</p>
   {{FIELDS}}
   <label for="styles">Styles (comma-separated)</label>
   <input id="styles" type="text" placeholder="electronic, 120 BPM, dark, instrumental" />
+  <label class="select-row" for="modelId">
+    <span class="control-label">Model</span>
+    <select id="modelId">
+      <option value="music_v2_5" selected>Music v2.5</option>
+      <option value="music_v2">Music v2</option>
+    </select>
+  </label>
+  <label class="select-row" for="outputFormat">
+    <span class="control-label">Quality</span>
+    <select id="outputFormat">
+      <option value="auto">Auto (best for model)</option>
+      <option value="mp3_48000_192" selected>MP3 48 kHz 192 kbps</option>
+      <option value="mp3_48000_240">MP3 48 kHz 240 kbps</option>
+      <option value="mp3_48000_320">MP3 48 kHz 320 kbps</option>
+      <option value="mp3_44100_128">MP3 44.1 kHz 128 kbps</option>
+    </select>
+  </label>
   <div class="buttons">
     <button type="button" onclick='closeWithResult({ cancelled: true })'>Cancel</button>
     <button type="button" class="primary" onclick="submit()">Generate</button>

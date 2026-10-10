@@ -22,6 +22,7 @@ const CLIENT_API_KEY = Symbol.for("elevenlabs-ableton.apiKey");
 export const DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
 export const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
 export const ELEVEN_V3_MODEL_ID = "eleven_v3";
+export const ELEVEN_V4_MODEL_ID = "eleven_v4";
 export const STS_MODEL_ID = "eleven_multilingual_sts_v2";
 export const STT_MODEL_ID = "scribe_v2";
 
@@ -81,8 +82,14 @@ export interface SfxRequest {
 
 export const MUSIC_MODEL_V1 = "music_v1";
 export const MUSIC_MODEL_V2 = "music_v2";
-export type MusicModelId = typeof MUSIC_MODEL_V1 | typeof MUSIC_MODEL_V2;
-export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V2;
+export const MUSIC_MODEL_V2_5 = "music_v2_5";
+export type MusicModelId = typeof MUSIC_MODEL_V1 | typeof MUSIC_MODEL_V2 | typeof MUSIC_MODEL_V2_5;
+export const DEFAULT_MUSIC_MODEL: MusicModelId = MUSIC_MODEL_V2_5;
+
+/** Inpainting only supports chunk plans (v2 and v2.5). */
+export function inpaintMusicModelId(modelId: MusicModelId | undefined): typeof MUSIC_MODEL_V2 | typeof MUSIC_MODEL_V2_5 {
+  return modelId === MUSIC_MODEL_V2 ? MUSIC_MODEL_V2 : MUSIC_MODEL_V2_5;
+}
 
 export interface MusicRequest {
   prompt: string;
@@ -102,6 +109,22 @@ export interface MusicRequest {
 export interface VoiceSummary {
   voiceId: string;
   name: string;
+  category?: string;
+  gender?: string;
+  age?: string;
+  accent?: string;
+  language?: string;
+  useCase?: string;
+}
+
+export interface VoiceListResult {
+  voices: VoiceSummary[];
+  nextPageToken?: string;
+  hasMore: boolean;
+}
+
+function labelOf(labels: Record<string, string> | undefined, key: string): string {
+  return labels?.[key]?.trim() ?? "";
 }
 
 export interface DialogueLine {
@@ -128,6 +151,7 @@ export interface MusicGenerationResult {
   bytes: Uint8Array;
   songId?: string;
   words?: TranscribedWord[];
+  compositionPlan?: unknown;
   viaDetailed: boolean;
 }
 
@@ -212,6 +236,8 @@ export function createClient(apiKey: string): ElevenLabsClient {
 interface DetailedMusicJson {
   wordsTimestamps?: Array<{ word: string; startMs: number; endMs: number }>;
   words_timestamps?: Array<{ word: string; start_ms: number; end_ms: number }>;
+  compositionPlan?: unknown;
+  composition_plan?: unknown;
 }
 
 type MusicClientWrapper = {
@@ -331,6 +357,7 @@ export async function generateMusicWithMetadata(
         bytes: new Uint8Array(detailed.audio),
         songId: detailed.songId,
         words: extractMusicWordTimestamps(detailed.json),
+        compositionPlan: detailed.json?.compositionPlan ?? detailed.json?.composition_plan,
         viaDetailed: true,
       };
     } catch {
@@ -353,10 +380,10 @@ export async function generateMusicWithMetadata(
 export async function composeInpaintingMusic(
   client: ElevenLabsClient,
   plan: MusicV2CompositionPlan,
-  options?: { outputFormat?: MusicOutputFormat; storeForInpainting?: boolean },
+  options?: { outputFormat?: MusicOutputFormat; storeForInpainting?: boolean; modelId?: MusicModelId },
 ): Promise<MusicGenerationResult> {
   const body = {
-    modelId: "music_v2",
+    modelId: inpaintMusicModelId(options?.modelId),
     outputFormat: options?.outputFormat ?? DEFAULT_MUSIC_OUTPUT_FORMAT,
     compositionPlan: plan,
     storeForInpainting: options?.storeForInpainting,
@@ -369,6 +396,7 @@ export async function composeInpaintingMusic(
         bytes: new Uint8Array(detailed.audio),
         songId: detailed.songId,
         words: extractMusicWordTimestamps(detailed.json),
+        compositionPlan: detailed.json?.compositionPlan ?? detailed.json?.composition_plan,
         viaDetailed: true,
       };
     } catch {
@@ -432,32 +460,108 @@ export async function isolateVocals(client: ElevenLabsClient, audioPath: string)
   return streamToBytes(stream);
 }
 
+function mapVoice(voice: {
+  voiceId: string;
+  name?: string | null;
+  category?: string;
+  labels?: Record<string, string>;
+  verifiedLanguages?: Array<{ language?: string }>;
+}): VoiceSummary {
+  return {
+    voiceId: voice.voiceId,
+    name: voice.name ?? voice.voiceId,
+    category: voice.category ?? "",
+    gender: labelOf(voice.labels, "gender"),
+    age: labelOf(voice.labels, "age"),
+    accent: labelOf(voice.labels, "accent"),
+    useCase: labelOf(voice.labels, "use_case"),
+    language: voice.verifiedLanguages?.[0]?.language ?? labelOf(voice.labels, "language"),
+  };
+}
+
 export async function listVoices(
   client: ElevenLabsClient,
-  search?: string,
-): Promise<VoiceSummary[]> {
-  const response = await client.voices.search({
-    pageSize: 50,
-    search: search || undefined,
-  });
+  options?: { search?: string; nextPageToken?: string },
+): Promise<VoiceListResult> {
+  const voices: VoiceSummary[] = [];
+  let token = options?.nextPageToken;
+  let hasMore = false;
+  let nextPageToken: string | undefined;
 
-  return response.voices.map((v) => ({
-    voiceId: v.voiceId,
-    name: v.name ?? v.voiceId,
-  }));
+  for (let page = 0; page < 3; page++) {
+    const response = await client.voices.search({
+      pageSize: 50,
+      search: options?.search || undefined,
+      nextPageToken: token,
+    });
+    voices.push(...response.voices.map(mapVoice));
+    hasMore = response.hasMore;
+    nextPageToken = response.nextPageToken;
+    if (!hasMore || !nextPageToken) break;
+    token = nextPageToken;
+  }
+
+  return { voices, nextPageToken, hasMore };
+}
+
+export interface DialogueOptions {
+  modelId?: string;
+  stability?: number;
+  similarity?: number;
+  previousText?: string;
+  futureText?: string;
 }
 
 export async function generateDialogue(
   client: ElevenLabsClient,
   lines: DialogueLine[],
-  options?: { stability?: number },
+  options?: DialogueOptions,
 ): Promise<Uint8Array> {
+  const settings =
+    options?.stability !== undefined || options?.similarity !== undefined
+      ? { stability: options.stability, similarity: options.similarity }
+      : undefined;
   const stream = await client.textToDialogue.convert({
     inputs: lines.map((line) => ({ text: line.text, voiceId: line.voiceId })),
+    modelId: options?.modelId,
     outputFormat: "mp3_44100_128",
-    settings: options?.stability !== undefined ? { stability: options.stability } : undefined,
+    settings,
+    previousText: options?.previousText,
+    futureText: options?.futureText,
   });
   return streamToBytes(stream);
+}
+
+export interface DialogueTimestampResult {
+  bytes: Uint8Array;
+  voiceSegments: Array<{ startTimeSeconds: number; dialogueInputIndex: number }>;
+}
+
+export async function generateDialogueWithTimestamps(
+  client: ElevenLabsClient,
+  lines: DialogueLine[],
+  options?: DialogueOptions,
+): Promise<DialogueTimestampResult> {
+  const response = await client.textToDialogue.convertWithTimestamps({
+    inputs: lines.map((line) => ({ text: line.text, voiceId: line.voiceId })),
+    modelId: options?.modelId,
+    outputFormat: "mp3_44100_128",
+    settings:
+      options?.stability !== undefined || options?.similarity !== undefined
+        ? { stability: options.stability, similarity: options.similarity }
+        : undefined,
+    previousText: options?.previousText,
+    futureText: options?.futureText,
+  });
+  const audio = response.audioBase64;
+  if (!audio) throw new Error("Dialogue response did not include audio.");
+  return {
+    bytes: Buffer.from(audio, "base64"),
+    voiceSegments: (response.voiceSegments ?? []).map((segment) => ({
+      startTimeSeconds: segment.startTimeSeconds,
+      dialogueInputIndex: segment.dialogueInputIndex,
+    })),
+  };
 }
 
 export async function transcribeAudio(

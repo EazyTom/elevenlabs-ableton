@@ -76,7 +76,7 @@ export type ApiKeyValidationResult =
 export async function validateApiKey(apiKey: string): Promise<ApiKeyValidationResult> {
   try {
     const client = createClient(apiKey.trim());
-    const voices = await listVoices(client);
+    const voices = (await listVoices(client)).voices;
     if (!voices.length) {
       return { ok: false, reason: "invalid" };
     }

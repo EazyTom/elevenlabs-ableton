@@ -25,7 +25,21 @@ This project uses the **BMad Method** for planning and implementation.
 
 ## Current release
 
-**v0.6.0** — Drum Rack SFX pad-slot refactor, API key onboarding & management
+**Current release: v0.8.0** — Music v2.5, Eleven v4 speech and dialogue, arrangement locators, clip names and colors, voice filters, Live 12.4.15 beta and Live 13.0 beta.
+
+Feature spec: [docs/v0.8.0-features.md](docs/v0.8.0-features.md). Still planned: [docs/roadmap.md](docs/roadmap.md).
+
+Before tagging a release, run `npm run smoke` locally. That command does not start or connect to Live. GitHub CI does not run on push or pull request.
+
+## Live compatibility
+
+| Live | Extensions |
+| --- | --- |
+| Live 12.4.15 beta | Supported (API 1.0.0) |
+| Live 13.0 beta | Supported (API 1.0.0; do not opt into experimental 1.0.1) |
+| Retail Live 12.4.x | No Extension Host |
+
+Both Extension Hosts run Node 24.14.1. Dev tooling requires Node ≥ 24.16.0.
 
 ---
 
@@ -70,7 +84,7 @@ These were tried and **reverted** because they broke extension load or stability
 - `install-globals.ts`: `formdata-polyfill` + Node `Blob`/`File`/streams — **no undici**
 - Loaders: `.html` → `text`, `.png` → `dataurl` (logo in `ui-branding.ts`)
 
-Bundle size ~8 MB is expected (ElevenLabs SDK + `formdata-polyfill`). Do not “optimize” by removing shims without testing in Live.
+Bundle size ~5.2 MB is expected (ElevenLabs SDK + `formdata-polyfill`). Do not “optimize” by removing shims without testing in Live.
 
 ---
 
@@ -110,14 +124,15 @@ Modals are **HTML files** in `ui/` loaded as data URLs by the Ableton Extension 
 
 | HTML | Prompt / entry | Subtitle | Notes |
 |------|----------------|----------|-------|
-| `tts-modal.html` | `promptTts` | Text-to-Speech | `{{VOICE_OPTIONS}}` injection |
+| `tts-modal.html` | `promptTts` | Text-to-Speech | Flash v2.5, Eleven v4, Eleven v3. `{{VOICE_OPTIONS}}` and `{{VOICE_FILTER}}` |
 | `sfx-modal.html` | `promptSfx` | Generate Sound Effects | `{{SFX_PROMPT_RANDOMIZER}}`; `normalizeSfxModalResult` |
-| `music-modal.html` | `promptMusic` | Generate Music | `{{MUSIC_PROMPT_RANDOMIZER}}`, `{{LIVE_TEMPO}}`; reads Live tempo |
+| `music-modal.html` | `promptMusic` | Generate Music | v2.5 default. `{{MUSIC_PROMPT_RANDOMIZER}}`, `{{LIVE_TEMPO}}`; optional arrangement locators |
+| `music-inpaint-modal.html` | `promptMusicInpaint` | Music inpainting | Model v2.5 or v2, plus quality. Extend, similar, and loop omit source duration |
 | `drum-rack-sfx-modal.html` | `promptDrumRackSfx` | Drum Rack SFX | **7 pad slots** — see below |
 | `api-key-modal.html` | `promptApiKey` / `resolveApiKeyWithPrompt` | ElevenLabs API Key | Show/hide key; manage mode |
-| `dialogue-modal.html` | `promptDialogue` | Text to dialogue | Three voice dropdowns |
+| `dialogue-modal.html` | `promptDialogue` | Text to dialogue | Eleven v3 or v4, similarity, before/after context, locators, voice filters |
 | `sfx-variant-picker-modal.html` | `promptSfxVariantPick` | Pick variant | Radio list after multi-gen SFX/Music |
-| `voice-modal.html` | `promptVoice` | Voice selection | |
+| `voice-modal.html` | `promptVoice` | Voice selection | Same voice filters as TTS |
 | `clone-voice-modal.html` | `promptCloneVoice` | Clone voice | |
 | `align-lyrics-modal.html` | `promptAlignLyrics` | Align lyrics | |
 | `pronunciation-modal.html` | `promptPronunciationRule` | | |
@@ -158,7 +173,8 @@ Modal JSON is raw user input. Always normalize in `ui.ts` before returning to pi
 | Modal | Normalizer | Key defaults |
 |-------|------------|--------------|
 | SFX | `normalizeSfxModalResult` | `autoDuration: true`, clamp variants 1–10 |
-| Music | `normalizeMusicModalResult` | tempo, genres, length ms |
+| Music | `normalizeMusicModalResult` | model `music_v2_5` unless v2 or v1, `parseMusicOutputFormat` |
+| Music inpaint | inline in `promptMusicInpaint` | model v2.5 or v2, output format |
 | Drum Rack | `normalizeDrumRackSfxModalResult` + `normalizeDrumPads` | per-pad duration on 0.5s grid, `autoDuration` default true |
 
 Types live in `src/types.ts`. Pipeline reads normalized result only.
@@ -365,6 +381,7 @@ To retheme: change `ACTIVE_UI_THEME` in `ui-theme.ts` (or add a preset to `UI_TH
 |-----|----------|
 | [README.md](README.md) | User setup, storage dir, `.ablx` install |
 | [docs/roadmap.md](docs/roadmap.md) | Shipped + planned scope |
-| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Drum Rack SFX pad-slot + API key (current) |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | Current release: Music v2.5, Eleven v4, locators, voice filters |
+| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Drum Rack SFX pad-slot + API key (v0.6.0) |
 | [docs/pre-release-checklist.md](docs/pre-release-checklist.md) | Before tagging a release |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |

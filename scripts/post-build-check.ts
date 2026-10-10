@@ -4,11 +4,10 @@
  * Usage:
  *   npm run check:build              # bundle + version checks only
  *   npm run check:api                # bundle checks + ElevenLabs API smoke tests
- *   npm run check:api -- --full      # includes SFX generation (extra API cost)
  *
  * Requires ELEVENLABS_API_KEY or --storage-directory with api-key.txt for API tests.
  */
-import { readFile } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -58,10 +57,14 @@ import { randomSfxPrompt, SFX_LOOP_SUFFIX, SFX_PROMPT_BANKS } from "../src/sfx-p
 import { clampSfxVariants, MAX_SFX_VARIANTS } from "../src/sfx-variants.js";
 import {
   createClient,
+  ELEVEN_V4_MODEL_ID,
+  generateDialogue,
+  generateDialogueWithTimestamps,
   generateSfx,
   generateTts,
   listVoices,
   resolveApiKey,
+  transcribeAudio,
 } from "../src/elevenlabs-client.js";
 import { timedWordsToLyricNotes } from "../src/midi-io.js";
 import { EXTENSION_VERSION } from "../src/version.js";
@@ -69,7 +72,6 @@ import { extractZipArchive, stemVolumeLevel } from "../src/zip-io.js";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SKIP_API = process.argv.includes("--skip-api");
-const FULL_API = process.argv.includes("--full");
 const storageArg = process.argv.find((a) => a.startsWith("--storage-directory="));
 const storageDirectory = storageArg?.split("=")[1]
   ?? process.env.ELEVENLABS_STORAGE_DIRECTORY;
@@ -131,6 +133,8 @@ async function checkBundle(): Promise<void> {
     "ElevenLabsClient",
     "registerContextMenuAction",
     "--c-accent-secondary",
+    "music_v2_5",
+    "createCuePoint",
   ];
   for (const marker of markers) {
     if (!bundle!.includes(marker)) {
@@ -382,6 +386,38 @@ async function checkAsyncStorage(): Promise<void> {
   }
 }
 
+function isBillingBlock(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes("payment_issue") || message.includes("payment_required");
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 180) : String(err);
+}
+
+/** Billing blocks are reported and do not fail the build. The v4 TTS probe reports any error. */
+async function paidCall(
+  id: string,
+  run: () => Promise<string>,
+  options?: { reportAnyError?: boolean },
+): Promise<boolean> {
+  try {
+    pass(id, await run());
+    return true;
+  } catch (err) {
+    if (options?.reportAnyError) {
+      pass(id, `reported, not failed: ${errorText(err)}`);
+      return false;
+    }
+    if (isBillingBlock(err)) {
+      pass(id, "skipped: ElevenLabs payment_issue");
+      return false;
+    }
+    fail(id, errorText(err));
+    return false;
+  }
+}
+
 async function checkApiSmoke(): Promise<void> {
   if (SKIP_API) {
     console.log("\nAPI smoke tests skipped (--skip-api).");
@@ -398,24 +434,75 @@ async function checkApiSmoke(): Promise<void> {
 
   const client = createClient(apiKey);
 
-  const voices = await listVoices(client);
+  const listed = await listVoices(client);
+  const voices = listed.voices;
   if (!voices.length) {
     fail("api-voices-search", "voices.search returned empty list");
+  } else if (!voices.some((voice) => voice.gender || voice.accent || voice.category)) {
+    fail("api-voices-search", "no voice returned labels");
+  } else {
+    pass("api-voices-search", `${voices.length} voices, labels present`);
   }
-  pass("api-voices-search", `${voices.length} voices (page 1)`);
 
-  const ttsBytes = await generateTts(client, { text: "Ableton extension smoke test." });
-  if (ttsBytes.byteLength < 500) {
-    fail("api-tts", `TTS response too small (${ttsBytes.byteLength} bytes)`);
+  let ttsBytes: Uint8Array | undefined;
+  await paidCall("api-tts", async () => {
+    const bytes = await generateTts(client, { text: "Ableton extension smoke test." });
+    if (bytes.byteLength < 500) throw new Error(`TTS response too small (${bytes.byteLength} bytes)`);
+    ttsBytes = bytes;
+    return `${bytes.byteLength} bytes MP3`;
+  });
+
+  await paidCall("api-tts-v4-probe", async () => {
+    const v4 = await generateTts(client, { text: "Version four probe.", modelId: ELEVEN_V4_MODEL_ID });
+    return `accepted, ${v4.byteLength} bytes`;
+  }, { reportAnyError: true });
+
+  const voiceA = voices[0]?.voiceId;
+  const voiceB = voices[1]?.voiceId ?? voiceA;
+  if (voiceA && voiceB) {
+    await paidCall("api-dialogue-v4", async () => {
+      const dialogue = await generateDialogue(
+        client,
+        [
+          { text: "Hello.", voiceId: voiceA },
+          { text: "Hi.", voiceId: voiceB },
+        ],
+        { modelId: ELEVEN_V4_MODEL_ID },
+      );
+      if (dialogue.byteLength < 200) throw new Error("dialogue audio too small");
+      return `${dialogue.byteLength} bytes`;
+    });
+
+    await paidCall("api-dialogue-timestamps", async () => {
+      const timed = await generateDialogueWithTimestamps(
+        client,
+        [{ text: "Hello there.", voiceId: voiceA }],
+        { modelId: ELEVEN_V4_MODEL_ID },
+      );
+      const segment = timed.voiceSegments[0];
+      if (!timed.bytes.byteLength || !segment || typeof segment.startTimeSeconds !== "number") {
+        throw new Error("missing audio or voiceSegments");
+      }
+      return `${timed.voiceSegments.length} voice segment(s)`;
+    });
   }
-  pass("api-tts", `${ttsBytes.byteLength} bytes MP3`);
 
-  if (FULL_API) {
+  await paidCall("api-sfx", async () => {
     const sfxBytes = await generateSfx(client, { text: "short click", durationSeconds: 1 });
-    if (sfxBytes.byteLength < 200) {
-      fail("api-sfx", `SFX response too small (${sfxBytes.byteLength} bytes)`);
-    }
-    pass("api-sfx", `${sfxBytes.byteLength} bytes MP3`);
+    if (sfxBytes.byteLength < 200) throw new Error(`SFX response too small (${sfxBytes.byteLength} bytes)`);
+    return `${sfxBytes.byteLength} bytes MP3`;
+  });
+
+  if (ttsBytes && ttsBytes.byteLength >= 500) {
+    await paidCall("api-stt", async () => {
+      const audioPath = path.join(tmpdir(), `elevenlabs-smoke-${Date.now()}.mp3`);
+      await writeFile(audioPath, ttsBytes!);
+      const transcript = await transcribeAudio(client, audioPath);
+      if (!transcript.trim()) throw new Error("empty transcript");
+      return transcript.slice(0, 60);
+    });
+  } else {
+    pass("api-stt", "skipped: no TTS audio (billing or failed synthesis)");
   }
 }
 

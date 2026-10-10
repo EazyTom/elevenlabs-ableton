@@ -1,6 +1,6 @@
 # Table of Contents
 
-Quick navigation for **[README.md](README.md)** (`elevenlabs-ableton` v0.6.0).  
+Quick navigation for **[README.md](README.md)** (`elevenlabs-ableton` v0.8.0).  
 All section links use GitHub-flavored markdown anchors into the README.
 
 ---
@@ -8,10 +8,8 @@ All section links use GitHub-flavored markdown anchors into the README.
 ## Overview
 
 - [Ableton Extension: elevenlabs-ableton](README.md#ableton-extension-elevenlabs-ableton)
-- [What's new in v0.6.0](README.md#whats-new-in-v060)
-- [What's new in v0.5.0](README.md#whats-new-in-v050)
+- [Current capabilities](README.md#current-capabilities)
 - [Screenshots](README.md#screenshots)
-- [What's new in v0.4.0](README.md#whats-new-in-v040)
 
 ---
 
@@ -40,10 +38,12 @@ All section links use GitHub-flavored markdown anchors into the README.
 
 - [Features by release](README.md#features-by-release)
 - [Roadmap](README.md#roadmap)
+  - [Shipped (v0.8.0)](README.md#shipped-v080)
+  - [Shipped (v0.7.0)](README.md#shipped-v070)
   - [Shipped (v0.6.0)](README.md#shipped-v060)
   - [Shipped (v0.5.0)](README.md#shipped-v050)
   - [Shipped (v0.4.0)](README.md#shipped-v040)
-  - [Planned (v0.6.0+)](README.md#planned-v060)
+  - [Planned](README.md#planned)
 
 ---
 
@@ -81,12 +81,13 @@ All section links use GitHub-flavored markdown anchors into the README.
 
 | Document | Description |
 |----------|-------------|
-| [CHANGELOG.md](CHANGELOG.md) | Release notes — [v0.6.0](CHANGELOG.md#v060) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes — [v0.8.0](CHANGELOG.md#v080) |
 | [LICENSE](LICENSE) | GPL-3.0-or-later |
 | [AGENTS.md](AGENTS.md) | Agent / contributor conventions |
-| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Latest feature spec |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | Current feature spec |
+| [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | v0.6.0 Drum Rack and API key spec |
 | [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | v0.5.0 feature spec |
-| [docs/roadmap.md](docs/roadmap.md) | Detailed roadmap |
+| [docs/roadmap.md](docs/roadmap.md) | Shipped scope and what is still planned |
 | [docs/pre-release-checklist.md](docs/pre-release-checklist.md) | Pre-tag checklist |
 | [docs/project-context.md](docs/project-context.md) | Lean project context |
 

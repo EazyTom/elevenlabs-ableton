@@ -8,20 +8,21 @@ Ableton Live **extension** (not a standalone app) that calls **ElevenLabs** APIs
 
 | Item | Value |
 |------|-------|
-| **Release** | `0.6.0` (`src/version.ts`) |
-| **Live** | 12.4 Alpha + Developer Mode |
-| **Ableton SDK** | `@ableton-extensions/sdk` 1.0.0-beta.0, API `"1.0.0"` |
-| **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` ^2.51.0, bundled via esbuild |
-| **Entry** | `dist/extension.js` (CJS bundle ~3.9 MB) |
+| **Release** | `0.8.0` (`src/version.ts`) |
+| **Live** | 12.4.15 beta or 13.0 beta + Developer Mode. Retail 12.4.x has no Extension Host. Both hosts run Node 24.14.1. |
+| **Ableton SDK** | `@ableton-extensions/sdk` 1.0.0-beta.1, API `"1.0.0"` |
+| **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` ^2.71.0, bundled via esbuild |
+| **Entry** | `dist/extension.js` (CJS bundle ~5.2 MB) |
 
 ## Dev commands
 
 ```bash
 cd elevenlabs-ableton
 npm run build          # production bundle
-npm start              # build:dev + extensions-cli run
-npm start   # auto: --storage-directory + --temp-directory from .env
-extensions-cli run --storage-directory D:\Repos\ElevenLabs --temp-directory D:\Repos\ElevenLabs\.elevenlabs-temp
+npm start              # build:dev + Live (newest beta, or ABLETON_LIVE / EXTENSION_HOST_PATH)
+npm run start:12       # Live 12 beta
+npm run start:13       # Live 13 beta
+npm run smoke          # build + fake host + API. Does not open Live
 ```
 
 ## Architecture (src/)
@@ -30,8 +31,10 @@ extensions-cli run --storage-directory D:\Repos\ElevenLabs --temp-directory D:\R
 |--------|------|
 | `extension.ts` | `activate()`, commands, context menus |
 | `version.ts` | `EXTENSION_VERSION`, `FEATURE_VERSIONS` |
-| `elevenlabs-client.ts` | API wrappers (TTS, SFX, music, STS, STT, dialogue, voices) |
+| `elevenlabs-client.ts` | API wrappers (TTS, SFX, music v2.5, inpaint, STS, STT, dialogue v4, voices) |
 | `pipelines.ts` | Progress dialogs + Live import orchestration |
+| `live-markers.ts` | Music, dialogue, and transcript cue points |
+| `clip-metadata.ts` | `EL {feature}` names and feature colors |
 | `audio-io.ts` | Temp files, `importIntoProject`, clips, Simpler |
 | `midi-io.ts` | Scribe words → `NoteDescription[]` lyric markers |
 | `drum-io.ts` | Drum rack pad → Simpler lookup |
@@ -55,7 +58,7 @@ extensions-cli run --storage-directory D:\Repos\ElevenLabs --temp-directory D:\R
 1. `ELEVENLABS_API_KEY` environment variable
 2. `{storageDirectory}/api-key.txt`
 
-**Persisted config:** `{storageDirectory}/elevenlabs-config.json` — cloned voices, pronunciation dictionaries, active dict ID.
+**Persisted config:** `{storageDirectory}/elevenlabs-config.json` — cloned voices, pronunciation dictionaries, active dict ID, last voice filter.
 
 ## Versioning
 

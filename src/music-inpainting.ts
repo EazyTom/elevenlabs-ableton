@@ -5,6 +5,9 @@ export const MAX_CHUNK_MS = 120_000;
 export const MAX_CHUNKS = 30;
 export const MAX_CONDITIONING_MS = 30_000;
 export const MIN_RANGE_MS = 50;
+export const MAX_CHUNK_CHARS = 6_132;
+export const MAX_CHUNK_LINES = 30;
+export const MAX_LINE_CHARS = 200;
 
 export type ContextAdherence = "low" | "medium" | "high";
 export type ConditionStrength = "low" | "medium" | "high" | "xhigh";
@@ -59,6 +62,7 @@ export function assertChunkPlan(plan: MusicV2CompositionPlan): void {
       if (chunk.durationMs < MIN_CHUNK_MS || chunk.durationMs > MAX_CHUNK_MS) {
         throw new Error(`Chunk duration must be ${MIN_CHUNK_MS}–${MAX_CHUNK_MS}ms.`);
       }
+      assertChunkText(chunk.text);
       if (chunk.conditioningRef) {
         const refDuration =
           chunk.conditioningRef.range.endMs - chunk.conditioningRef.range.startMs;
@@ -73,6 +77,29 @@ export function assertChunkPlan(plan: MusicV2CompositionPlan): void {
       }
     }
   }
+}
+
+function assertChunkText(text: string): void {
+  if (text.length > MAX_CHUNK_CHARS) {
+    throw new Error(`Chunk text exceeds ${MAX_CHUNK_CHARS} characters.`);
+  }
+  const lines = text.split(/\r?\n/);
+  if (lines.length > MAX_CHUNK_LINES) {
+    throw new Error(`Chunk text exceeds ${MAX_CHUNK_LINES} lines.`);
+  }
+  for (const line of lines) {
+    if (line.length > MAX_LINE_CHARS) {
+      throw new Error(`A chunk line exceeds ${MAX_LINE_CHARS} characters.`);
+    }
+  }
+}
+
+/** Sum of generation durations and audio-reference ranges — the billed output length. */
+export function planOutputDurationMs(plan: MusicV2CompositionPlan): number {
+  return plan.chunks.reduce((total, chunk) => {
+    if ("durationMs" in chunk) return total + chunk.durationMs;
+    return total + (chunk.range.endMs - chunk.range.startMs);
+  }, 0);
 }
 
 function generationChunk(

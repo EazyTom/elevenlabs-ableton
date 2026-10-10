@@ -1,6 +1,6 @@
 {
   "name": "elevenlabs-ableton",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "GPL-3.0-or-later",
   "main": "dist/extension.js",
   "engines": {
@@ -11,7 +11,15 @@
     "build": "tsc --noEmit && tsx build.ts --production",
     "build:dev": "tsc --noEmit && tsx build.ts",
     "start": "npm run build:dev && tsx scripts/start-dev.ts",
-    "package": "npm run build && extensions-cli package",
+    "start:12": "npm run build:dev && tsx scripts/start-dev.ts --live 12",
+    "start:13": "npm run build:dev && tsx scripts/start-dev.ts --live 13",
+    "smoke": "tsx scripts/smoke.ts",
+    "smoke:host": "tsx scripts/smoke-host.mjs",
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "smoke:live:12": "tsx scripts/smoke-live.ts --live 12",
+    "smoke:live:13": "tsx scripts/smoke-live.ts --live 13",
+    "test:music": "tsx scripts/test-compose-detailed.ts",
+    "package": "npm run build && ableton-extensions-cli package",
     "check:build": "tsx scripts/post-build-check.ts --skip-api",
     "check:api": "tsx scripts/post-build-check.ts",
     "check:api:full": "tsx scripts/post-build-check.ts --full",
@@ -20,20 +28,20 @@
   },
   "dependencies": {
     "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.1.tgz",
-    "@elevenlabs/elevenlabs-js": "^2.60.0",
+    "@elevenlabs/elevenlabs-js": "^2.71.0",
     "fflate": "^0.8.3",
     "formdata-polyfill": "^4.0.10"
   },
   "devDependencies": {
     "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.1.tgz",
-    "@types/node": "^24.13.3",
-    "esbuild": "0.28.1",
-    "tsx": "^4.23.4",
+    "@types/node": "^24.19.2",
+    "esbuild": "0.28.2",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^6.0.0"
+    "vite": "^8.3.4"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true,
     "esbuild@0.25.12": true
   }
 }

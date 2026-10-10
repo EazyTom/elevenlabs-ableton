@@ -1,6 +1,6 @@
 import type { VoiceSummary } from "./elevenlabs-client.js";
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 let cache: { voices: VoiceSummary[]; fetchedAt: number } | null = null;
 

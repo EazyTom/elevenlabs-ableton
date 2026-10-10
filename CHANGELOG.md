@@ -6,6 +6,31 @@ Extension release version is defined in `src/version.ts` (`EXTENSION_VERSION`) a
 
 Feature-level versions are tracked in `FEATURE_VERSIONS` inside `src/version.ts` for incremental capability tracking.
 
+<a id="v080"></a>
+
+## [0.8.0] — 2026-10-10
+
+### Added
+
+- **Music v2.5** as the default music model (v2 remains available, v1 is marked deprecated)
+- **Eleven v4 dialogue** with similarity and optional before/after context, and **Eleven v4** in the text-to-speech model picker (confirmed against the API)
+- **Arrangement locators** for music sections, transcripts, and dialogue turns
+- **Clip names and colors** on generated audio, plus named take lanes for voice changer and isolation
+- **Voice picker filters** (search, gender, age, accent, language, category) applied inside the modal, with cloned voices merged in
+- **Live 12.4.15 beta and Live 13.0 beta** dev launchers (`npm run start:12` / `start:13`)
+- **Manual smoke tests**: `npm run smoke` (build, fake-host commands, API). It does not start or connect to Live. `npm run smoke:live:12` and `smoke:live:13` stay available when Live is already open
+
+### Changed
+
+- Dependencies: `@elevenlabs/elevenlabs-js` ^2.71.0, esbuild 0.28.2, tsx ^4.23.15, Vite ^8
+- Music inpainting no longer clips extend, loop, and similar output to the source length
+- GitHub CI no longer runs on push or pull request. Run `npm run smoke` locally before tagging a release
+
+### Fixed
+
+- Inpaint song records store the generated duration
+- Drum Rack device insertion starts its Live transaction synchronously
+
 <a id="v070"></a>
 
 ## [0.7.0] — 2026-08-02

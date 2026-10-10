@@ -25,6 +25,7 @@ import {
   ELEVEN_V3_MODEL_ID,
   forceAlignAudio,
   generateDialogue,
+  generateDialogueWithTimestamps,
   generateMusicWithMetadata,
   composeInpaintingMusic,
   generateSfx,
@@ -51,6 +52,8 @@ import {
 import type { ExtensionContext } from "./live-selection.js";
 import { isAudioTrack, isClipSlot } from "./sdk-objects.js";
 import { applyVocalPostFx, setTrackVolume } from "./live-io.js";
+import { clipNameFor, featureColor } from "./clip-metadata.js";
+import { addCuePoints, dialogueLocatorSegments, musicLocatorSegments, sentencesFromWords } from "./live-markers.js";
 import { alignedWordsToLyricNotes, secondsToBeats, wordsToLyricNotes } from "./midi-io.js";
 import {
   addClonedVoice,
@@ -80,6 +83,7 @@ import {
   buildRegenerateSectionPlan,
   buildSeamlessLoopPlan,
   buildSimilarPlan,
+  planOutputDurationMs,
   stylesFromPrompt,
 } from "./music-inpainting.js";
 import { resolveSongIdForAudio } from "./music-song-resolver.js";
@@ -184,10 +188,10 @@ async function generateAllMusicVariants(
   composedPrompt: string,
   update: (text: string, progress?: number) => void,
   signal: AbortSignal,
-): Promise<Array<{ bytes: Uint8Array; songId?: string; words?: TranscribedWord[] }> | null> {
+): Promise<Array<{ bytes: Uint8Array; songId?: string; words?: TranscribedWord[]; compositionPlan?: unknown }> | null> {
   const count = clampMusicVariants(modal.variants);
   const request = { ...musicRequestFromModal(modal, composedPrompt), storeForInpainting: true };
-  const variants: Array<{ bytes: Uint8Array; songId?: string; words?: TranscribedWord[] }> = [];
+  const variants: Array<{ bytes: Uint8Array; songId?: string; words?: TranscribedWord[]; compositionPlan?: unknown }> = [];
 
   for (let i = 0; i < count; i++) {
     if (signal.aborted) return null;
@@ -196,7 +200,12 @@ async function generateAllMusicVariants(
     if (result.bytes.byteLength < 200) {
       throw new Error(`Variant ${i + 1} is empty or too small to use.`);
     }
-    variants.push({ bytes: result.bytes, songId: result.songId, words: result.words });
+    variants.push({
+      bytes: result.bytes,
+      songId: result.songId,
+      words: result.words,
+      compositionPlan: result.compositionPlan,
+    });
   }
 
   return variants;
@@ -480,6 +489,9 @@ export async function pipelineMusic(
           });
         }
         await maybeCreateMusicLyricMarkers(context, modal, meta?.words, importClipArgs);
+        if (modal.addLocators && importClipArgs.startTime !== undefined) {
+          await addCuePoints(context, importClipArgs.startTime, musicLocatorSegments(meta?.compositionPlan));
+        }
       } else {
         update("Importing into Live", 85);
         const importedPath = await importGeneratedAudio(
@@ -499,6 +511,9 @@ export async function pipelineMusic(
           });
         }
         await maybeCreateMusicLyricMarkers(context, modal, variants[0]!.words, importClipArgs);
+        if (modal.addLocators && importClipArgs.startTime !== undefined) {
+          await addCuePoints(context, importClipArgs.startTime, musicLocatorSegments(variants[0]!.compositionPlan));
+        }
       }
     }
     update("Done", 100);
@@ -581,6 +596,7 @@ export async function pipelineVoiceChanger(
     if (signal.aborted) return;
     update("Creating take lane clip", 85);
     const takeLane = await track.createTakeLane();
+    takeLane.name = clipNameFor("Voice", voiceId);
     await importGeneratedAudio(context, bytes, "elevenlabs-voice-changed.mp3", takeLane, {
       startTime,
       duration: endTime - startTime,
@@ -598,7 +614,12 @@ async function importIsolatedVoiceToTakeLane(
   clipArgs: ImportClipArgs,
 ): Promise<void> {
   const takeLane = await track.createTakeLane();
-  await importGeneratedAudio(context, bytes, VOICE_ISOLATION_FILENAME, takeLane, clipArgs);
+  takeLane.name = clipNameFor("Isolation", "vocals");
+  await importGeneratedAudio(context, bytes, VOICE_ISOLATION_FILENAME, takeLane, {
+    ...clipArgs,
+    name: clipNameFor("Isolation", "vocals"),
+    color: featureColor("isolation"),
+  });
 }
 
 async function importIsolatedVoiceToSlot(
@@ -690,11 +711,17 @@ export async function pipelineTranscribe(
   context: ExtensionContext,
   audioPath: string,
   showTranscriptResult: (transcript: string) => Promise<void>,
+  options?: { addLocators?: boolean; clipStartBeat?: number },
 ): Promise<void> {
   await withElevenLabsProgress(context, "ElevenLabs Scribe", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Transcribing audio", 50);
-    const transcript = await transcribeAudio(client, audioPath);
+    const { text: transcript, words } = options?.addLocators
+      ? await transcribeWithWords(client, audioPath)
+      : { text: await transcribeAudio(client, audioPath), words: [] as TranscribedWord[] };
+    if (options?.addLocators && options.clipStartBeat !== undefined) {
+      await addCuePoints(context, options.clipStartBeat, sentencesFromWords(words));
+    }
     if (signal.aborted) return;
     update("Showing transcript", 90);
     await showTranscriptResult(transcript);
@@ -731,10 +758,27 @@ export async function pipelineDialogue(
   await withElevenLabsProgress(context, "ElevenLabs Dialogue", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Generating dialogue", 45);
-    const bytes = await generateDialogue(client, lines, { stability: modal.stability });
+    const dialogueOptions = {
+      modelId: modal.modelId ?? "eleven_v3",
+      stability: modal.stability,
+      similarity: modal.similarity,
+      previousText: modal.previousText,
+      futureText: modal.futureText,
+    };
+    const timed = modal.addLocators
+      ? await generateDialogueWithTimestamps(client, lines, dialogueOptions)
+      : null;
+    const bytes = timed?.bytes ?? await generateDialogue(client, lines, dialogueOptions);
     if (signal.aborted) return;
     update("Importing into Live", 85);
-    await importGeneratedAudio(context, bytes, "elevenlabs-dialogue.mp3", target, clipArgs);
+    await importGeneratedAudio(context, bytes, "elevenlabs-dialogue.mp3", target, {
+      ...clipArgs,
+      name: clipNameFor("Dialogue", lines[0]?.text ?? "dialogue"),
+      color: featureColor("dialogue"),
+    });
+    if (modal.addLocators && timed && clipArgs.startTime !== undefined) {
+      await addCuePoints(context, clipArgs.startTime, dialogueLocatorSegments(timed.voiceSegments));
+    }
     update("Done", 100);
   });
 }
@@ -865,12 +909,16 @@ export async function pipelineTranscribeToMidi(
   audioPath: string,
   clipStartBeat: number,
   clipDurationBeats: number,
+  addLocators = false,
 ): Promise<void> {
   await withElevenLabsProgress(context, "ElevenLabs → MIDI Lyrics", async (client, update, signal) => {
     if (signal.aborted) return;
     update("Transcribing with word timestamps", 40);
     const { words } = await transcribeWithWords(client, audioPath);
     if (signal.aborted) return;
+    if (addLocators) {
+      await addCuePoints(context, clipStartBeat, sentencesFromWords(words));
+    }
 
     const tempo = context.application.song.tempo;
     const notes = wordsToLyricNotes(words, tempo, clipStartBeat);
@@ -1074,7 +1122,11 @@ export async function pipelineMusicInpaint(
   target: AudioTrack<"1.0.0">,
   clipArgs: ImportClipArgs,
 ): Promise<void> {
-  const musicFormat = parseMusicOutputFormat(undefined);
+  const musicFormat = parseMusicOutputFormat(modal.outputFormat);
+  const omitSourceDuration = mode === "extend" || mode === "similar" || mode === "loop";
+  const importArgs: ImportClipArgs = omitSourceDuration
+    ? { startTime: clipArgs.startTime, isWarped: clipArgs.isWarped, looping: mode === "loop" }
+    : { ...clipArgs, looping: false };
 
   await withElevenLabsProgress(context, "ElevenLabs Music Inpaint", async (client, update, signal) => {
     if (signal.aborted) return;
@@ -1086,12 +1138,14 @@ export async function pipelineMusicInpaint(
 
     update("Building inpainting plan", 35);
     let activeSongId = songId;
+    let plan = buildInpaintPlan(mode, activeSongId, totalDurationMs, modal);
     update("Generating music", 55);
     let result;
     try {
-      result = await composeInpaintingMusic(client, buildInpaintPlan(mode, activeSongId, totalDurationMs, modal), {
+      result = await composeInpaintingMusic(client, plan, {
         outputFormat: musicFormat,
         storeForInpainting: true,
+        modelId: modal.modelId,
       });
     } catch (err) {
       const message = formatApiError(err).toLowerCase();
@@ -1106,11 +1160,12 @@ export async function pipelineMusicInpaint(
         retryUpload: true,
       });
       update("Generating music", 55);
-      result = await composeInpaintingMusic(
-        client,
-        buildInpaintPlan(mode, activeSongId, totalDurationMs, modal),
-        { outputFormat: musicFormat, storeForInpainting: true },
-      );
+      plan = buildInpaintPlan(mode, activeSongId, totalDurationMs, modal);
+      result = await composeInpaintingMusic(client, plan, {
+        outputFormat: musicFormat,
+        storeForInpainting: true,
+        modelId: modal.modelId,
+      });
     }
     if (signal.aborted) return;
 
@@ -1120,14 +1175,14 @@ export async function pipelineMusicInpaint(
       result.bytes,
       importFilename(`elevenlabs-music-${mode}`, musicFormat),
       target,
-      { ...clipArgs, looping: mode === "loop" },
+      importArgs,
     );
     if (result.songId) {
       await addStoredSong(context.environment.storageDirectory, {
         songId: result.songId,
         filePath: importedPath,
         prompt: modal.styles,
-        durationMs: totalDurationMs,
+        durationMs: planOutputDurationMs(plan),
         createdAt: Date.now(),
       });
     }

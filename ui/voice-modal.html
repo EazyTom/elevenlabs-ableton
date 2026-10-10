@@ -21,7 +21,11 @@
       const voiceId = document.getElementById("voiceId").value.trim()
         || document.getElementById("voiceSelect").value.trim();
       if (!voiceId) return;
-      closeWithResult({ cancelled: false, voiceId });
+      closeWithResult({
+        cancelled: false,
+        voiceId,
+        voiceFilter: typeof voiceFilterState === "function" ? voiceFilterState() : undefined,
+      });
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -35,8 +39,9 @@
 <body>
   <p>Select the target ElevenLabs voice for speech-to-speech conversion.</p>
 
+  {{VOICE_FILTER}}
   <label for="voiceSelect">Voice (from library)</label>
-  <select id="voiceSelect">{{VOICE_OPTIONS}}</select>
+  <select id="voiceSelect" class="voice-pick">{{VOICE_OPTIONS}}</select>
 
   <label for="voiceId">Voice ID (override)</label>
   <input id="voiceId" type="text" placeholder="Optional custom ID" />

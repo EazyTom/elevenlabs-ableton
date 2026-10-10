@@ -1,13 +1,23 @@
+export interface VoiceFilterSelection {
+  search?: string;
+  gender?: string;
+  age?: string;
+  accent?: string;
+  language?: string;
+  category?: string;
+}
+
 export interface TextVoiceModalResult {
   cancelled?: boolean;
   text?: string;
   voiceId?: string;
-  modelId?: "eleven_flash_v2_5" | "eleven_v3";
+  modelId?: "eleven_flash_v2_5" | "eleven_v3" | "eleven_v4";
   /** TTS voice settings (ElevenLabs voice_settings). */
   speed?: number;
   stability?: number;
   similarityBoost?: number;
   style?: number;
+  voiceFilter?: VoiceFilterSelection;
 }
 
 export interface SfxModalResult {
@@ -32,6 +42,7 @@ export interface SfxVariantPickerResult {
 export interface VoiceOnlyModalResult {
   cancelled?: boolean;
   voiceId?: string;
+  voiceFilter?: VoiceFilterSelection;
 }
 
 export interface MusicModalResult {
@@ -47,11 +58,12 @@ export interface MusicModalResult {
   promptInfluence?: number;
   negativePrompt?: string;
   outputFormat?: string;
-  modelId?: "music_v1" | "music_v2";
+  modelId?: "music_v1" | "music_v2" | "music_v2_5";
   /** Optional seed for composition-plan generation (music v2). */
   seed?: number;
   /** Number of generations to create (1–10); user picks one when > 1. */
   variants?: number;
+  addLocators?: boolean;
 }
 
 export type MusicInpaintMode = "extend" | "regenerate" | "loop" | "similar";
@@ -70,6 +82,8 @@ export interface MusicInpaintModalResult {
   glueSec?: number;
   prompt?: string;
   durationSec?: number;
+  modelId?: "music_v2" | "music_v2_5";
+  outputFormat?: string;
 }
 
 export interface DialogueModalResult {
@@ -79,6 +93,12 @@ export interface DialogueModalResult {
   voiceC?: string;
   script?: string;
   stability?: number;
+  similarity?: number;
+  modelId?: string;
+  previousText?: string;
+  futureText?: string;
+  addLocators?: boolean;
+  voiceFilter?: VoiceFilterSelection;
 }
 
 export interface DrumPadConfig {

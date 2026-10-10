@@ -100,6 +100,7 @@
         modelId: document.getElementById("modelId").value,
         seed: Number.isFinite(seedParsed) ? seedParsed : undefined,
         variants: Number.isFinite(variants) ? variants : 1,
+        addLocators: document.getElementById("addLocators").checked,
       });
     }
 
@@ -267,11 +268,13 @@
     <input id="seed" type="number" min="0" step="1" placeholder="Optional (plan mode only)" style="flex:1" />
   </label>
 
+  <label class="checkbox"><input id="addLocators" type="checkbox" /> Add arrangement locators at section boundaries</label>
   <label class="select-row" for="modelId">
     <span class="control-label">Model</span>
     <select id="modelId">
-      <option value="music_v2" selected>Music v2</option>
-      <option value="music_v1">Music v1 (legacy)</option>
+      <option value="music_v2_5" selected>Music v2.5</option>
+      <option value="music_v2">Music v2</option>
+      <option value="music_v1">Music v1 (deprecated)</option>
     </select>
   </label>
 
@@ -292,7 +295,7 @@
   </label>
 
   <div class="hints-section">
-    <p class="hint model-hint">Music v2 is recommended. v1 is legacy and will be deprecated. Seamless loops use inpainting (right-click a generated clip after import).</p>
+    <p class="hint model-hint">Music v2.5 is recommended. v1 is deprecated. Seamless loops use inpainting (right-click a generated clip after import).</p>
     <p class="hint loop-hint">For loops, try 8–30 seconds. Variants load into the selected slot and the slots below it.</p>
     <p class="hint quality-hint">MP3 192 kbps and PCM formats require a higher ElevenLabs plan (Creator or Pro).</p>
   </div>
