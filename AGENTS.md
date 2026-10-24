@@ -25,9 +25,9 @@ This project uses the **BMad Method** for planning and implementation.
 
 ## Current release
 
-**Current release: v0.8.0** — Music v2.5, Eleven v4 speech and dialogue, arrangement locators, clip names and colors, voice filters, Live 12.4.15 beta and Live 13.0 beta.
+**Current release: v0.8.1** — Generate Music part control (full music, instrumental part, instrument solo, vocal solo).
 
-Feature spec: [docs/v0.8.0-features.md](docs/v0.8.0-features.md). Still planned: [docs/roadmap.md](docs/roadmap.md).
+Feature spec: [docs/v0.8.1-features.md](docs/v0.8.1-features.md). Still planned: [docs/roadmap.md](docs/roadmap.md).
 
 Before tagging a release, run `npm run smoke` locally. That command does not start or connect to Live. GitHub CI does not run on push or pull request.
 
@@ -381,7 +381,8 @@ To retheme: change `ACTIVE_UI_THEME` in `ui-theme.ts` (or add a preset to `UI_TH
 |-----|----------|
 | [README.md](README.md) | User setup, storage dir, `.ablx` install |
 | [docs/roadmap.md](docs/roadmap.md) | Shipped + planned scope |
-| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | Current release: Music v2.5, Eleven v4, locators, voice filters |
+| [docs/v0.8.1-features.md](docs/v0.8.1-features.md) | Current release: music part control |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | Music v2.5, Eleven v4, locators, voice filters |
 | [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | Drum Rack SFX pad-slot + API key (v0.6.0) |
 | [docs/pre-release-checklist.md](docs/pre-release-checklist.md) | Before tagging a release |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |

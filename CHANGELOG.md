@@ -6,6 +6,14 @@ Extension release version is defined in `src/version.ts` (`EXTENSION_VERSION`) a
 
 Feature-level versions are tracked in `FEATURE_VERSIONS` inside `src/version.ts` for incremental capability tracking.
 
+<a id="v081"></a>
+
+## [0.8.1] — 2026-10-23
+
+### Added
+
+- **Music part control** — Generate Music can lock the duration to one part: instrumental, instrument solo, or vocal solo. Full music stays the previous prompt request. Vocal solo sends an a cappella composition plan and uses multi-line description text as lyrics. It does not set `force_instrumental`.
+
 <a id="v080"></a>
 
 ## [0.8.0] — 2026-10-10

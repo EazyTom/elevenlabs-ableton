@@ -25,6 +25,8 @@ export function musicRequestFromModal(modal: MusicModalResult, prompt: string): 
     negativePrompt: modal.negativePrompt,
     outputFormat: parseMusicOutputFormat(modal.outputFormat),
     seed: modal.seed,
+    partMode: modal.partMode,
+    description: modal.prompt,
   };
 }
 

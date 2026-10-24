@@ -2,7 +2,7 @@
  * Extension versioning — bump EXTENSION_VERSION on each release.
  * Feature versions track when individual capabilities were introduced or changed.
  */
-export const EXTENSION_VERSION = "0.8.0";
+export const EXTENSION_VERSION = "0.8.1";
 
 export const FEATURE_VERSIONS = {
   ttsClipSlot: "1.0.0",
@@ -35,6 +35,7 @@ export const FEATURE_VERSIONS = {
   arrangementLocators: "1.0.0",
   clipMetadata: "1.0.0",
   voiceFilters: "1.0.0",
+  musicPart: "1.0.0",
 } as const;
 
 export type FeatureId = keyof typeof FEATURE_VERSIONS;
@@ -70,6 +71,7 @@ export const FEATURE_LABELS: Record<FeatureId, string> = {
   arrangementLocators: "Arrangement locators",
   clipMetadata: "Generated clip names and colors",
   voiceFilters: "Voice picker filters",
+  musicPart: "Music part control (full, instrumental, solo, vocal)",
 };
 
 export function logExtensionInfo(details?: { language?: string }): void {

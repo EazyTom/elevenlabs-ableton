@@ -9,12 +9,12 @@
 
 Bring **ElevenLabs** API integration into **Ableton Live** — text-to-speech dialogue, sound effects generation, music generation, voice transformation, transcription, stem separation, voice cloning, batch processing, and more — directly from Live context menus.
 
-**Current release: [v0.8.0](CHANGELOG.md#v080)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
+**Current release: [v0.8.1](CHANGELOG.md#v081)** · [Changelog](CHANGELOG.md) · [Contents](SUMMARY.md) · [License (GPL-3.0+)](LICENSE)
 
 
 | Field                        | Value                                                         |
 | ---------------------------- | ------------------------------------------------------------- |
-| **Extension version**        | `0.8.0`                                                       |
+| **Extension version**        | `0.8.1`                                                       |
 | **Ableton Extensions API**   | `1.0.0` (`minimumApiVersion` in `manifest.json`)              |
 | **Ableton SDK**              | `@ableton-extensions/sdk` **1.0.0-beta.1**                    |
 | **ElevenLabs SDK**           | `@elevenlabs/elevenlabs-js` **^2.71.0**                       |
@@ -66,7 +66,7 @@ Right-click clips, tracks, slots, devices, or selections in Live to access Eleve
 | **Pronunciation** | Custom word pronunciation for TTS                                                                                    | Audio track (any)                                  |
 
 
-**v0.8.0** adds **Music v2.5** (default), **Eleven v4** for dialogue and text-to-speech, arrangement locators, clip names and colors, and voice-picker filters. Generated clips are named and colored. It runs on **Live 12.4.15 beta** and **Live 13.0 beta**. Spec: [docs/v0.8.0-features.md](docs/v0.8.0-features.md).
+**v0.8.1** adds a Generate Music **Part** control: full music, an instrumental part, an instrument solo, or a vocal solo. Part modes lock the duration to one section. Spec: [docs/v0.8.1-features.md](docs/v0.8.1-features.md). **v0.8.0** added **Music v2.5** (default), **Eleven v4** for dialogue and text-to-speech, arrangement locators, clip names and colors, and voice-picker filters. It runs on **Live 12.4.15 beta** and **Live 13.0 beta**.
 
 **v0.5.0** Session **Isolate Voice** on audio clip slots and clips replaces the clip in place and preserves loop settings.
 
@@ -103,11 +103,12 @@ Right-click an **audio clip slot** or **arrangement selection** → **Generate M
 | Control              | Description                                                                                                                                                                                                    |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Duration**         | **Auto duration** off by default. Manual slider **3–600 s** (default **30 s** when auto is off).                                                                                                               |
+| **Part**             | **Full music** (default), **Instrumental part**, **Instrument solo**, or **Vocal solo**. Part modes disable auto duration and send one composition-plan section for the slider length. Vocal solo uses a cappella styles. Several description lines become the lyrics. The Instrumental genre is ignored in that mode. |
 | **Description**      | Free-text prompt; optional if at least one **genre** is selected.                                                                                                                                              |
 | **Randomize**        | Random rich music prompt (genres, instruments, mood, production, cinematic flavor).                                                                                                                            |
 | **Variants**         | Slider **1–10**. **Session View:** each variant loads into the **selected clip slot and consecutive slots below** on the same track (no picker). **Arrangement:** multi-variant still uses the variant picker. |
 | **Genres**           | Single grid: electronic (Trap, House, Techno, …), cinematic styles (Epic, Horror, Sci-Fi, Bollywood, …), and styles such as Jazz, Folk, 80s Retro, Acoustic, etc.                                              |
-| **Mood toggles**     | Folded into **Genres** (Dark, Lo-fi, Instrumental, etc.). Instrumental also sets API `force_instrumental`.                                                                                                     |
+| **Mood toggles**     | Folded into **Genres** (Dark, Lo-fi, Instrumental, etc.). On Full music, Instrumental also sets API `force_instrumental`. Vocal solo does not.                                                                  |
 | **Set tempo**        | On by default; slider starts at **Live’s set tempo** and adds BPM to the prompt. When enabled, generate also sets **`song.tempo`** in the Live Set.                                                            |
 | **Prompt influence** | Slider **0–1** (default 0.3).                                                                                                                                                                                  |
 | **Negative prompt**  | Optional comma-separated styles to avoid (e.g. vocals, distortion). Uses a **composition plan** with `negative_global_styles` instead of plain prompt mode.                                                    |
@@ -217,7 +218,7 @@ Some APIs require a **paid ElevenLabs plan** (e.g. **Music generation**, **stem 
 
 ### Install & run (pre-built `.ablx`)
 
-Download `elevenlabs-ableton-0.8.0.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
+Download `elevenlabs-ableton-0.8.1.ablx` from a [GitHub Release](CHANGELOG.md) (or build locally — see [Package for release](#package-for-release)).
 
 1. Open **Live → Preferences → Extensions**
 2. **Drag and drop** the `.ablx` onto the Extensions page
@@ -254,6 +255,7 @@ Temp audio before Live import is written under **`{storageDirectory}/.elevenlabs
 | **0.5.0** | Session voice isolation; SFX/Music modal UX; Live tempo sync; audio-slot guards; UI layout polish               |
 | **0.6.0** | Drum Rack SFX pad-slot modal; API key onboarding & management; MIDI clip slot drum entry                        |
 | **0.7.0** | Music inpainting: extend, regenerate section, seamless loop, generate similar                                   |
+| **0.8.1** | Generate Music part control: full music, instrumental part, instrument solo, vocal solo |
 | **0.8.0** | Music v2.5, Eleven v4 speech and dialogue, arrangement locators, clip names and colors, voice filters, Live 12 and 13 beta support |
 
 
@@ -262,6 +264,11 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 ---
 
 ## Roadmap
+
+### Shipped (v0.8.1)
+
+- Generate Music part control: full music, instrumental part, instrument solo, and vocal solo
+- Vocal solo keeps lyrics and does not force an instrumental mix
 
 ### Shipped (v0.8.0)
 
@@ -308,7 +315,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md). Per-feature versions: `src/version.t
 | Later    | User-edited music section plan |
 
 
-Details: [docs/roadmap.md](docs/roadmap.md) and [docs/v0.8.0-features.md](docs/v0.8.0-features.md).
+Details: [docs/roadmap.md](docs/roadmap.md) and [docs/v0.8.1-features.md](docs/v0.8.1-features.md).
 
 ---
 
@@ -456,7 +463,7 @@ npm run package
 1. Open **Live 12.4.15 beta** or **Live 13.0 beta**
 2. Preferences → **Extensions** → enable **Developer Mode**
 3. Run `npm start`, `npm run start:12`, or `npm run start:13` so Live loads the extension
-4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.8.0 active`
+4. Confirm in the Extension Host console: `[elevenlabs-ableton] v0.8.1 active`
 
 ---
 
@@ -467,10 +474,10 @@ From the project root, with **Node.js ≥ 24.16.0** and `vendor/*.tgz` SDK packa
 ```bash
 npm install
 npm run check:api          # optional — needs ELEVENLABS_API_KEY
-npm run package            # production build + elevenlabs-ableton-0.8.0.ablx
+npm run package            # production build + elevenlabs-ableton-0.8.1.ablx
 ```
 
-`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `ableton-extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v080).
+`npm run package` runs `npm run build` first (type-check, esbuild bundle, post-build checks), then `ableton-extensions-cli package`. The `.ablx` file is written next to the project (gitignored). Attach it to a GitHub Release and update release notes from [CHANGELOG.md](CHANGELOG.md#v081).
 
 Manual steps before tagging: align versions in `src/version.ts`, `manifest.json`, and `package.json`; run [docs/pre-release-checklist.md](docs/pre-release-checklist.md).
 
@@ -540,11 +547,12 @@ See [docs/pre-release-checklist.md](docs/pre-release-checklist.md) and [docs/roa
 
 | Document                                                               | Audience                           |
 | ---------------------------------------------------------------------- | ---------------------------------- |
-| [CHANGELOG.md](CHANGELOG.md)                                           | Release notes (v0.1.0 → v0.8.0)    |
+| [CHANGELOG.md](CHANGELOG.md)                                           | Release notes (v0.1.0 → v0.8.1)    |
 | [SUMMARY.md](SUMMARY.md)                                               | Table of contents for this README  |
 | [LICENSE](LICENSE)                                                     | GPL-3.0-or-later terms             |
 | [docs/roadmap.md](docs/roadmap.md)                                     | Planned features                   |
-| [docs/v0.8.0-features.md](docs/v0.8.0-features.md)                     | Current feature spec               |
+| [docs/v0.8.1-features.md](docs/v0.8.1-features.md)                     | Current feature spec               |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md)                     | v0.8.0 feature spec                |
 | [docs/v0.6.0-features.md](docs/v0.6.0-features.md)                     | v0.6.0 Drum Rack and API key spec  |
 | [docs/v0.5.0-features.md](docs/v0.5.0-features.md)                     | v0.5.0 feature spec                |
 | [docs/v0.4.0-features.md](docs/v0.4.0-features.md)                     | v0.4.0 feature spec                |

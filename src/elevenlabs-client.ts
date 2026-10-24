@@ -9,7 +9,8 @@ import {
   type AudioOutputFormat,
   type MusicOutputFormat,
 } from "./audio-output-formats.js";
-import { buildMusicV1CompositionPlan, buildMusicV2CompositionPlan } from "./music-prompt.js";
+import { buildMusicPartV1Plan, buildMusicPartV2Plan, buildMusicV1CompositionPlan, buildMusicV2CompositionPlan } from "./music-prompt.js";
+import type { MusicPartMode } from "./types.js";
 import type { MusicV2CompositionPlan } from "./music-inpainting.js";
 import { tryResolveApiKey } from "./api-key.js";
 import {
@@ -104,6 +105,10 @@ export interface MusicRequest {
   /** Only honored when a composition plan is sent (spec forbids seed with prompt). */
   seed?: number;
   storeForInpainting?: boolean;
+  /** Duration-locked part. Full music keeps the prompt path. */
+  partMode?: MusicPartMode;
+  /** Original description. Vocal solo lyrics and instrument-solo prefixes come from this, not the joined style prompt. */
+  description?: string;
 }
 
 export interface VoiceSummary {
@@ -170,10 +175,15 @@ function buildMusicComposeBody(request: MusicRequest): {
   const modelId = request.modelId ?? DEFAULT_MUSIC_MODEL;
   const outputFormat = request.outputFormat ?? DEFAULT_MUSIC_OUTPUT_FORMAT;
   const negativeTerms = parseNegativePromptTerms(request.negativePrompt);
-  const durationMs = request.autoDuration
-    ? undefined
-    : clampMusicLengthMs(request.musicLengthMs);
-  const useCompositionPlan = negativeTerms.length > 0 && durationMs !== undefined;
+  const partMode = request.partMode === "instrumental" || request.partMode === "instrumentSolo" || request.partMode === "vocalSolo"
+    ? request.partMode
+    : undefined;
+  const durationMs = partMode
+    ? (clampMusicLengthMs(request.musicLengthMs) ?? 30_000)
+    : request.autoDuration
+      ? undefined
+      : clampMusicLengthMs(request.musicLengthMs);
+  const useCompositionPlan = (partMode !== undefined || negativeTerms.length > 0) && durationMs !== undefined;
 
   const body: ReturnType<typeof buildMusicComposeBody> = {
     modelId,
@@ -183,8 +193,23 @@ function buildMusicComposeBody(request: MusicRequest): {
   };
 
   if (useCompositionPlan) {
-    body.compositionPlan =
-      modelId === MUSIC_MODEL_V1
+    body.compositionPlan = partMode
+      ? modelId === MUSIC_MODEL_V1
+        ? buildMusicPartV1Plan({
+            partMode,
+            stylePrompt: request.prompt,
+            description: request.description,
+            negativeTerms,
+            durationMs,
+          })
+        : buildMusicPartV2Plan({
+            partMode,
+            stylePrompt: request.prompt,
+            description: request.description,
+            negativeTerms,
+            durationMs,
+          })
+      : modelId === MUSIC_MODEL_V1
         ? buildMusicV1CompositionPlan(
             request.prompt,
             negativeTerms,

@@ -45,11 +45,15 @@ export interface VoiceOnlyModalResult {
   voiceFilter?: VoiceFilterSelection;
 }
 
+export type MusicPartMode = "full" | "instrumental" | "instrumentSolo" | "vocalSolo";
+
 export interface MusicModalResult {
   cancelled?: boolean;
   prompt?: string;
   musicLengthMs?: number;
   autoDuration?: boolean;
+  /** Full piece, or one duration-locked part. Defaults to a full piece. */
+  partMode?: MusicPartMode;
   forceInstrumental?: boolean;
   /** Genre toggle keys (trap, house, epic, dark, …). */
   genres?: string[];

@@ -21,6 +21,8 @@ import { isAudioClipSlot } from "../src/clip-io.js";
 import { parseDialogueScript, validateDialogueInput } from "../src/dialogue.js";
 import {
   buildMusicCompositionPlan,
+  buildMusicPartV1Plan,
+  buildMusicPartV2Plan,
   buildMusicPrompt,
   musicForceInstrumental,
   MUSIC_LOOP_SUFFIX,
@@ -231,7 +233,62 @@ function checkPureFunctions(): void {
   ) {
     fail("music-prompt", "build, randomize, or composition plan failed");
   }
+
+  const vocalPart = buildMusicPartV2Plan({
+    partMode: "vocalSolo",
+    stylePrompt: "soul, 90 BPM",
+    description: "I waited all night\nfor the light",
+    durationMs: 30_000,
+  });
+  const vocalChunk = vocalPart.chunks[0];
+  const vocalV1 = buildMusicPartV1Plan({
+    partMode: "vocalSolo",
+    stylePrompt: "soul, 90 BPM",
+    description: "I waited all night\nfor the light",
+    durationMs: 30_000,
+  });
+  const soloPart = buildMusicPartV1Plan({
+    partMode: "instrumentSolo",
+    stylePrompt: "jazz, electric guitar, 90 BPM",
+    description: "electric guitar",
+    durationMs: 30_000,
+  });
+  const soloWithDrums = buildMusicPartV2Plan({
+    partMode: "instrumentSolo",
+    stylePrompt: "house, with drums",
+    description: "with drums",
+    durationMs: 30_000,
+  });
+  const instrumentalPart = buildMusicPartV2Plan({
+    partMode: "instrumental",
+    stylePrompt: "ambient",
+    negativeTerms: ["distortion"],
+    durationMs: 30_000,
+  });
+  if (
+    !vocalChunk ||
+    !vocalChunk.text.startsWith("[Vocal Solo]\n") ||
+    !vocalChunk.text.includes("I waited all night") ||
+    !vocalChunk.text.includes("for the light") ||
+    vocalChunk.negativeStyles.includes("vocals") ||
+    vocalChunk.negativeStyles.includes("singing") ||
+    vocalChunk.negativeStyles.includes("lyrics") ||
+    !vocalChunk.positiveStyles.includes("a cappella solo vocal") ||
+    !vocalV1.sections[0]?.lines.includes("for the light") ||
+    vocalV1.sections[0]?.lines.length !== 2 ||
+    !soloPart.positiveGlobalStyles.includes("solo electric guitar") ||
+    soloPart.sections[0]?.lines.length !== 0 ||
+    !soloPart.negativeGlobalStyles.includes("drums") ||
+    soloWithDrums.chunks[0]?.negativeStyles.includes("drums") ||
+    !instrumentalPart.chunks[0]?.text.includes("[Instrumental]") ||
+    !instrumentalPart.chunks[0]?.negativeStyles.includes("vocals") ||
+    !instrumentalPart.chunks[0]?.negativeStyles.includes("distortion") ||
+    musicForceInstrumental({ genres: ["instrumental"], partMode: "vocalSolo" })
+  ) {
+    fail("music-part", "part plan, vocal lyrics, or instrumental override failed");
+  }
   pass("music-prompt", "genres, randomizer, loop, composition plan");
+  pass("music-part", "instrumental, solo, and vocal part plans");
 
   const sfxPrompt = randomSfxPrompt({}, () => 0);
   const loopPrompt = randomSfxPrompt({ loop: true }, () => 0);

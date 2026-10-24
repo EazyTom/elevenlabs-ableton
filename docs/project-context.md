@@ -8,7 +8,7 @@ Ableton Live **extension** (not a standalone app) that calls **ElevenLabs** APIs
 
 | Item | Value |
 |------|-------|
-| **Release** | `0.8.0` (`src/version.ts`) |
+| **Release** | `0.8.1` (`src/version.ts`) |
 | **Live** | 12.4.15 beta or 13.0 beta + Developer Mode. Retail 12.4.x has no Extension Host. Both hosts run Node 24.14.1. |
 | **Ableton SDK** | `@ableton-extensions/sdk` 1.0.0-beta.1, API `"1.0.0"` |
 | **ElevenLabs SDK** | `@elevenlabs/elevenlabs-js` ^2.71.0, bundled via esbuild |

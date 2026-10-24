@@ -88,7 +88,7 @@ import {
 } from "./music-inpainting.js";
 import { resolveSongIdForAudio } from "./music-song-resolver.js";
 import { addStoredSong } from "./storage.js";
-import { buildMusicPrompt, musicForceInstrumental } from "./music-prompt.js";
+import { buildMusicPrompt, musicForceInstrumental, vocalSoloLyricLines } from "./music-prompt.js";
 import { consecutiveClipSlotsFrom } from "./clip-io.js";
 import {
   clampMusicVariants,
@@ -408,7 +408,8 @@ export async function pipelineMusic(
   clipArgs: ImportClipArgs,
   mode: MusicImportMode = "session",
 ): Promise<void> {
-  const composedPrompt = buildMusicPrompt(modal, {
+  const lyricDescription = modal.partMode === "vocalSolo" && vocalSoloLyricLines(modal.prompt).length > 0;
+  const composedPrompt = buildMusicPrompt(lyricDescription ? { ...modal, prompt: undefined } : modal, {
     rootNote: context.application.song.rootNote,
     scaleName: context.application.song.scaleName,
   });

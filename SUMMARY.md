@@ -1,6 +1,6 @@
 # Table of Contents
 
-Quick navigation for **[README.md](README.md)** (`elevenlabs-ableton` v0.8.0).  
+Quick navigation for **[README.md](README.md)** (`elevenlabs-ableton` v0.8.1).  
 All section links use GitHub-flavored markdown anchors into the README.
 
 ---
@@ -38,6 +38,7 @@ All section links use GitHub-flavored markdown anchors into the README.
 
 - [Features by release](README.md#features-by-release)
 - [Roadmap](README.md#roadmap)
+  - [Shipped (v0.8.1)](README.md#shipped-v081)
   - [Shipped (v0.8.0)](README.md#shipped-v080)
   - [Shipped (v0.7.0)](README.md#shipped-v070)
   - [Shipped (v0.6.0)](README.md#shipped-v060)
@@ -81,10 +82,11 @@ All section links use GitHub-flavored markdown anchors into the README.
 
 | Document | Description |
 |----------|-------------|
-| [CHANGELOG.md](CHANGELOG.md) | Release notes — [v0.8.0](CHANGELOG.md#v080) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes — [v0.8.1](CHANGELOG.md#v081) |
 | [LICENSE](LICENSE) | GPL-3.0-or-later |
 | [AGENTS.md](AGENTS.md) | Agent / contributor conventions |
-| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | Current feature spec |
+| [docs/v0.8.1-features.md](docs/v0.8.1-features.md) | Current feature spec |
+| [docs/v0.8.0-features.md](docs/v0.8.0-features.md) | v0.8.0 feature spec |
 | [docs/v0.6.0-features.md](docs/v0.6.0-features.md) | v0.6.0 Drum Rack and API key spec |
 | [docs/v0.5.0-features.md](docs/v0.5.0-features.md) | v0.5.0 feature spec |
 | [docs/roadmap.md](docs/roadmap.md) | Shipped scope and what is still planned |

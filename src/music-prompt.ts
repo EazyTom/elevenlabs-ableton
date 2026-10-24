@@ -1,4 +1,26 @@
-import type { MusicModalResult } from "./types.js";
+import type { MusicModalResult, MusicPartMode } from "./types.js";
+
+export type MusicPartKind = Exclude<MusicPartMode, "full">;
+
+const MAX_PART_LYRIC_LINES = 29;
+const MAX_PART_LINE_CHARS = 200;
+
+const INSTRUMENTAL_PART_NEGATIVES = ["vocals", "singing", "lyrics", "full song structure"] as const;
+const SOLO_BAND_NEGATIVES = ["full band", "drums", "backing track"] as const;
+const VOCAL_SOLO_NEGATIVES = [
+  "full band",
+  "drums",
+  "bass",
+  "instrumental accompaniment",
+  "backing vocals",
+  "choir",
+  "full song structure",
+] as const;
+const VOCAL_SOLO_POSITIVES = [
+  "a cappella solo vocal",
+  "single singing part",
+  "not a full song structure",
+] as const;
 
 const GENRE_PHRASES: Record<string, string> = {
   trap: "trap",
@@ -54,8 +76,25 @@ const GENRE_PHRASES: Record<string, string> = {
   neuro: "neurofunk",
 };
 
+export function parseMusicPartMode(value: string | undefined): MusicPartMode {
+  if (value === "instrumental" || value === "instrumentSolo" || value === "vocalSolo") return value;
+  return "full";
+}
+
 export function musicForceInstrumental(modal: MusicModalResult): boolean {
+  if (parseMusicPartMode(modal.partMode) !== "full") return false;
   return modal.genres?.includes("instrumental") ?? false;
+}
+
+/** Two or more description lines are lyrics. A single line stays a style note. */
+export function vocalSoloLyricLines(description: string | undefined): string[] {
+  const lines = (description ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.slice(0, MAX_PART_LINE_CHARS));
+  if (lines.length < 2) return [];
+  return lines.slice(0, MAX_PART_LYRIC_LINES);
 }
 
 /** Merge modal genres, tempo, key/scale, and free text into one ElevenLabs music prompt. */
@@ -177,6 +216,149 @@ export function buildMusicV2CompositionPlan(
       durationMs: section.durationMs,
       positiveStyles: styles,
       negativeStyles,
+      contextAdherence: "high" as const,
+    })),
+  };
+}
+
+export interface MusicPartPlanRequest {
+  partMode: MusicPartKind;
+  stylePrompt: string;
+  description?: string;
+  negativeTerms?: string[];
+  durationMs: number;
+}
+
+function stylePhrases(stylePrompt: string): string[] {
+  return stylePrompt
+    .split(/,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function addStyle(styles: string[], style: string): void {
+  const trimmed = style.trim();
+  if (!trimmed) return;
+  if (styles.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) return;
+  styles.push(trimmed);
+}
+
+function asksFor(prompt: string, term: string): boolean {
+  if (!prompt.toLowerCase().includes(term.toLowerCase())) return false;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return !new RegExp(`\\bno\\s+${escaped}\\b`, "i").test(prompt);
+}
+
+function soloPrefixed(phrase: string): string {
+  return /^solo\b/i.test(phrase) ? phrase : `solo ${phrase}`;
+}
+
+function partSectionName(partMode: MusicPartKind): string {
+  if (partMode === "instrumentSolo") return "Solo";
+  if (partMode === "vocalSolo") return "Vocal Solo";
+  return "Instrumental";
+}
+
+function partPlanContent(request: MusicPartPlanRequest): {
+  sectionName: string;
+  text: string;
+  lines: string[];
+  positiveStyles: string[];
+  negativeStyles: string[];
+  sections: ReturnType<typeof musicSectionsForDuration>;
+} {
+  const lyrics = request.partMode === "vocalSolo" ? vocalSoloLyricLines(request.description) : [];
+  const asked = `${request.stylePrompt}\n${request.description ?? ""}`;
+  const positiveStyles = stylePhrases(request.stylePrompt);
+
+  if (request.partMode === "instrumentSolo" && request.description?.trim()) {
+    const descriptionPhrases = new Set(
+      request.description
+        .split(/,\s*/)
+        .map((part) => part.trim().toLowerCase())
+        .filter(Boolean),
+    );
+    for (let index = 0; index < positiveStyles.length; index += 1) {
+      const phrase = positiveStyles[index];
+      if (phrase && descriptionPhrases.has(phrase.toLowerCase())) {
+        positiveStyles[index] = soloPrefixed(phrase);
+      }
+    }
+  }
+
+  if (request.partMode === "instrumental") {
+    addStyle(positiveStyles, "single instrumental part");
+    addStyle(positiveStyles, "not a full song structure");
+  } else if (request.partMode === "instrumentSolo") {
+    addStyle(positiveStyles, "single musical part");
+  } else {
+    for (const style of VOCAL_SOLO_POSITIVES) addStyle(positiveStyles, style);
+  }
+  if (!positiveStyles.length) addStyle(positiveStyles, "electronic music");
+
+  const negativeStyles: string[] = [];
+  for (const term of request.negativeTerms ?? []) addStyle(negativeStyles, term);
+  if (request.partMode === "vocalSolo") {
+    for (const term of VOCAL_SOLO_NEGATIVES) addStyle(negativeStyles, term);
+  } else {
+    for (const term of INSTRUMENTAL_PART_NEGATIVES) addStyle(negativeStyles, term);
+    if (request.partMode === "instrumentSolo") {
+      for (const term of SOLO_BAND_NEGATIVES) {
+        if (!asksFor(asked, term)) addStyle(negativeStyles, term);
+      }
+    }
+  }
+
+  const sectionName = partSectionName(request.partMode);
+  const text = lyrics.length ? `[${sectionName}]\n${lyrics.join("\n")}` : `[${sectionName}]`;
+
+  return {
+    sectionName,
+    text,
+    lines: lyrics,
+    positiveStyles,
+    negativeStyles,
+    sections: musicSectionsForDuration(request.durationMs),
+  };
+}
+
+/** One v1 section (or several, past 120s) for a duration-locked part. No force_instrumental flag. */
+export function buildMusicPartV1Plan(request: MusicPartPlanRequest): {
+  positiveGlobalStyles: string[];
+  negativeGlobalStyles: string[];
+  sections: ReturnType<typeof musicSectionsForDuration>;
+} {
+  const content = partPlanContent(request);
+  return {
+    positiveGlobalStyles: content.positiveStyles,
+    negativeGlobalStyles: content.negativeStyles,
+    sections: content.sections.map((section) => ({
+      sectionName: content.sectionName,
+      positiveLocalStyles: [] as string[],
+      negativeLocalStyles: [] as string[],
+      durationMs: section.durationMs,
+      lines: content.lines,
+    })),
+  };
+}
+
+/** One v2/v2.5 chunk (or several, past 120s) for a duration-locked part. */
+export function buildMusicPartV2Plan(request: MusicPartPlanRequest): {
+  chunks: Array<{
+    text: string;
+    durationMs: number;
+    positiveStyles: string[];
+    negativeStyles: string[];
+    contextAdherence: "high";
+  }>;
+} {
+  const content = partPlanContent(request);
+  return {
+    chunks: content.sections.map((section) => ({
+      text: content.text,
+      durationMs: section.durationMs,
+      positiveStyles: content.positiveStyles,
+      negativeStyles: content.negativeStyles,
       contextAdherence: "high" as const,
     })),
   };

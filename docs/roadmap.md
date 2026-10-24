@@ -12,12 +12,13 @@
 | **0.6.0** | Drum Rack SFX pad slots, API key onboarding, MIDI clip slot drum entry |
 | **0.7.0** | Music inpainting: extend, regenerate, seamless loop, similar |
 | **0.8.0** | Music v2.5, Eleven v4 speech and dialogue, locators, clip names and colors, voice filters, Live 12 and 13 beta |
+| **0.8.1** | Generate Music part control: full music, instrumental part, instrument solo, vocal solo |
 
-Spec: [v0.8.0-features.md](v0.8.0-features.md).
+Spec: [v0.8.1-features.md](v0.8.1-features.md).
 
 ## Still planned
 
-These are not in 0.8.0. The older tier lists below are the v0.5 planning notes; several of those items have since shipped (voice filters, TTS model picker, cue points for generated audio, cloned voices in the picker, dialogue speakers A/B/C).
+These are not in 0.8.1. The older tier lists below are the v0.5 planning notes; several of those items have since shipped (voice filters, TTS model picker, cue points for generated audio, cloned voices in the picker, dialogue speakers A/B/C).
 
 | Feature | Why it is still open |
 | --- | --- |
@@ -32,7 +33,7 @@ These are not in 0.8.0. The older tier lists below are the v0.5 planning notes; 
 | ElevenLabs SDK 3.x | Stay on 2.x until the Extension Host bundle is proven with 3.x. |
 | Experimental Live API 1.0.1 | Hosts accept it only with an experimental flag. This extension stays on 1.0.0. |
 
-## Surface coverage (as of v0.8.0)
+## Surface coverage (as of v0.8.1)
 
 ### `@elevenlabs/elevenlabs-js` — client resources
 
@@ -40,7 +41,7 @@ These are not in 0.8.0. The older tier lists below are the v0.5 planning notes; 
 |--------|-------------------|-------|
 | `textToSpeech` | ✓ `convert` | Flash v2.5 (default), Eleven v4, Eleven v3. Pronunciation locators except on v3. `convertWithTimestamps`, `stream`, and `streamWithTimestamps` are unused |
 | `textToSoundEffects` | ✓ `convert` | `eleven_text_to_sound_v2` only |
-| `music` | ✓ `composeDetailed`, `compose`, `separateStems` | Default `music_v2_5`. Not using `stream`, `videoToMusic`, finetune, or waveform preview |
+| `music` | ✓ `composeDetailed`, `compose`, `separateStems` | Default `music_v2_5`. Part modes send one composition-plan chunk. Not using `stream`, `videoToMusic`, finetune, or waveform preview |
 | `textToDialogue` | ✓ `convert`, `convertWithTimestamps` | Speakers A/B/C. Models `eleven_v3` and `eleven_v4` |
 | `speechToSpeech` | ✓ `convert` | Voice changer |
 | `audioIsolation` | ✓ `convert` | Vocal isolation |

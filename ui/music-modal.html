@@ -67,6 +67,38 @@
       updateDurationLabel();
     }
 
+    function partModeValue() {
+      const value = document.getElementById("partMode").value;
+      if (value === "instrumental" || value === "instrumentSolo" || value === "vocalSolo") return value;
+      return "full";
+    }
+
+    function syncPartModeUi() {
+      const mode = partModeValue();
+      const auto = document.getElementById("autoDuration");
+      const instrumental = document.querySelector('input[name="genres"][value="instrumental"]');
+      const hint = document.getElementById("partHint");
+      if (mode === "full") {
+        auto.disabled = false;
+        hint.textContent = "A complete piece. Auto duration lets the API choose the length.";
+      } else {
+        auto.checked = false;
+        auto.disabled = true;
+        hint.textContent = mode === "vocalSolo"
+          ? "One singing part for this duration. Put each lyric line on its own row. Instrumental is ignored."
+          : mode === "instrumentSolo"
+            ? "One solo instrument for this duration, without a full band or vocals."
+            : "One instrumental part for this duration, without vocals or a full song structure.";
+      }
+      if (instrumental) {
+        const lock = mode === "vocalSolo";
+        instrumental.disabled = lock;
+        if (lock) instrumental.checked = false;
+        instrumental.closest("label").classList.toggle("is-disabled", lock);
+      }
+      syncAutoDurationUi();
+    }
+
     function submit() {
       setError("");
       const prompt = document.getElementById("prompt").value.trim();
@@ -85,11 +117,13 @@
 
       const seedRaw = document.getElementById("seed").value.trim();
       const seedParsed = seedRaw ? parseInt(seedRaw, 10) : undefined;
+      const partMode = partModeValue();
 
       closeWithResult({
         cancelled: false,
         prompt: prompt || undefined,
-        autoDuration,
+        partMode,
+        autoDuration: partMode === "full" && autoDuration,
         musicLengthMs: autoDuration || !Number.isFinite(lengthSec) ? undefined : lengthSec * 1000,
         genres,
         tempoBpm: useTempo && Number.isFinite(tempoBpm) ? tempoBpm : undefined,
@@ -107,12 +141,13 @@
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("prompt").focus();
       document.getElementById("autoDuration").addEventListener("change", syncAutoDurationUi);
+      document.getElementById("partMode").addEventListener("change", syncPartModeUi);
       document.getElementById("tempo").addEventListener("input", updateTempoLabel);
       document.getElementById("length").addEventListener("input", updateDurationLabel);
       document.getElementById("variants").addEventListener("input", updateVariantsLabel);
       document.getElementById("influence").addEventListener("input", updateInfluenceLabel);
       document.getElementById("useTempo").addEventListener("change", syncTempoUi);
-      syncAutoDurationUi();
+      syncPartModeUi();
       syncTempoUi();
       updateDurationLabel();
       updateVariantsLabel();
@@ -143,7 +178,8 @@
       gap: 0.5em;
     }
     .prompt-header label { flex: 1; margin: 0; }
-    .loop-hint, .quality-hint, .negative-hint, .model-hint { font-size: 0.95em; }
+    .loop-hint, .quality-hint, .negative-hint, .model-hint, #partHint { font-size: 0.95em; }
+    .toggle.is-disabled { opacity: 0.45; }
     .hints-section {
       display: flex;
       flex-direction: column;
@@ -172,6 +208,17 @@
     <input id="autoDuration" type="checkbox" />
     Auto duration (API picks length from prompt)
   </label>
+
+  <label class="select-row" for="partMode">
+    <span class="control-label">Part</span>
+    <select id="partMode">
+      <option value="full" selected>Full music</option>
+      <option value="instrumental">Instrumental part</option>
+      <option value="instrumentSolo">Instrument solo</option>
+      <option value="vocalSolo">Vocal solo</option>
+    </select>
+  </label>
+  <p id="partHint" class="hint">A complete piece. Auto duration lets the API choose the length.</p>
 
   <label class="tempo-row">
     <input id="useTempo" type="checkbox" checked />

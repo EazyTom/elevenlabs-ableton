@@ -46,7 +46,7 @@ import {
 import { parseAudioOutputFormat, parseMusicOutputFormat } from "./audio-output-formats.js";
 import { SFX_MODEL_V2 } from "./elevenlabs-client.js";
 import { clampMusicLengthMs } from "./music-length.js";
-import { buildMusicPromptRandomizerScript, musicForceInstrumental } from "./music-prompt.js";
+import { buildMusicPromptRandomizerScript, musicForceInstrumental, parseMusicPartMode } from "./music-prompt.js";
 import { clampMusicVariants } from "./music-variants.js";
 import { buildSfxPromptRandomizerScript } from "./sfx-prompt.js";
 import { clampSfxVariants } from "./sfx-variants.js";
@@ -523,15 +523,17 @@ function prepareMusicModalHtml(template: string, liveTempo: number): string {
 
 function normalizeMusicModalResult(parsed: MusicModalResult): MusicModalResult {
   const negativePrompt = parsed.negativePrompt?.trim();
-  const autoDuration = parsed.autoDuration ?? false;
+  const partMode = parseMusicPartMode(parsed.partMode);
+  const autoDuration = partMode === "full" ? (parsed.autoDuration ?? false) : false;
   const musicLengthMs = autoDuration
     ? undefined
-    : clampMusicLengthMs(parsed.musicLengthMs);
+    : clampMusicLengthMs(partMode === "full" ? parsed.musicLengthMs : (parsed.musicLengthMs ?? 30_000));
   return {
     ...parsed,
     autoDuration,
     musicLengthMs,
-    forceInstrumental: musicForceInstrumental(parsed),
+    partMode,
+    forceInstrumental: musicForceInstrumental({ ...parsed, partMode }),
     variants: clampMusicVariants(parsed.variants),
     modelId:
       parsed.modelId === "music_v1"
